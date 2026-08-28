@@ -23,7 +23,7 @@ npm run preview
 Verification completed locally on 2026-08-28:
 
 - `npm test`: 4 unit tests and 6 Playwright checks passed across desktop Chromium and 390×844 mobile Chromium. The browser suite covers add → draft → edit → mark sent → reload persistence, legal routes, axe serious/critical checks, and explicit offline reload via `context.setOffline(true)`.
-- `npm run build`: passed; initial JS 29.84 KB / 10.34 KB gzip, CSS 17.98 KB / 4.88 KB gzip, font 18 KB, mobile hero AVIF 8.6 KB (all under budget).
+- `npm run build`: passed; initial JS 30.22 KB / 10.41 KB gzip, CSS 17.98 KB / 4.88 KB gzip, font 18 KB, mobile hero AVIF 8.6 KB (all under budget).
 - `npx tsc --noEmit`: passed.
 - `npm audit`: 0 vulnerabilities.
 - Factory `verify-url.sh`: HTTP 200, 622 ms local load, title/lang/main present, exactly one h1, 0 missing image alts, 0 unlabeled buttons, and 0 console/page errors.
