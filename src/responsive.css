@@ -1,4 +1,19 @@
 @media (max-width: 640px) {
+  /* Text-size controls can make the editorial heading wider than its flex item. */
+  .welcome,
+  .welcome-copy {
+    min-width: 0;
+  }
+
+  .welcome-copy {
+    max-width: min(530px, 100%);
+  }
+
+  .welcome h2 {
+    max-width: 100%;
+    overflow-wrap: anywhere;
+  }
+
   .hero-art {
     max-height: none;
     overflow: hidden;

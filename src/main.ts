@@ -19,6 +19,7 @@ let view: View = 'today';
 let draft: Draft | null = null;
 let unlocked = false;
 let loadError = '';
+let licenseNotice = '';
 const e = (value: unknown) => String(value ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!);
 
 function isLegalPage() { return location.pathname.startsWith('/privacy') || location.pathname.startsWith('/terms'); }
@@ -134,7 +135,7 @@ function renderTemplates(): string {
 function renderSettings(): string {
   return `<div class="settings-grid">
     <section><h2>Your sign-off</h2><p>Used only to fill <code>{{sender}}</code> in drafts.</p><form id="profile-form"><label>Your name<input name="senderName" value="${e(settings.senderName)}" autocomplete="name"></label><label>Business name <span>Optional</span><input name="businessName" value="${e(settings.businessName)}" autocomplete="organization"></label><button class="button secondary" type="submit">Save details</button></form></section>
-    <section><h2>Gentle Nudge Plus</h2>${unlocked ? `<p class="license-state success"><span aria-hidden="true">✓</span> Plus is active on this device.</p><p>You have unlimited active invoices and up to five cadence steps.</p>` : `<p>Free includes three editable steps and up to five active invoices. Plus removes that limit and adds two more steps.</p><p><strong>US $18 once.</strong> No subscription.</p><a class="button primary" href="https://api.sociobot.in/api/v1/products/payment-cadence/checkout">Buy Plus</a><form id="license-form"><label>Have a license? Paste it here<input name="license" autocomplete="off" spellcheck="false"></label><button class="button secondary" type="submit">Restore purchase</button></form>`}<p id="license-note" class="form-note" role="status"></p></section>
+    <section><h2>Gentle Nudge Plus</h2>${unlocked ? `<p class="license-state success"><span aria-hidden="true">✓</span> Plus is active on this device.</p><p>You have unlimited active invoices and up to five cadence steps.</p>` : `<p>Free includes three editable steps and up to five active invoices. Plus removes that limit and adds two more steps.</p><p><strong>US $18 once.</strong> No subscription.</p><a class="button primary" href="https://api.sociobot.in/api/v1/products/payment-cadence/checkout">Buy Plus</a><form id="license-form"><label>Have a license? Paste it here<input name="license" autocomplete="off" spellcheck="false"></label><button class="button secondary" type="submit">Restore purchase</button></form>`}<p id="license-note" class="form-note" role="status">${e(licenseNotice)}</p></section>
     <section class="data-section"><h2>Your data</h2><p>Export a full backup for this app, or a spreadsheet-friendly invoice list. Import replaces nothing: records with the same ID are updated.</p><div class="button-cluster"><button class="button secondary" data-action="export-json">Export backup</button><button class="button secondary" data-action="export-csv">Export CSV</button><label class="button secondary file-button">Import backup<input id="import-file" type="file" accept="application/json"></label></div><button class="danger-link" data-action="delete-all">Delete all local data</button></section>
     <section><h2>What this app never does</h2><ul class="promise-list"><li>Sends or schedules an email</li><li>Connects to your bank or invoice account</li><li>Scores clients or predicts payment</li><li>Uses collection threats</li></ul></section>
   </div>`;
@@ -224,7 +225,7 @@ document.addEventListener('submit', async (event) => {
   if (form.id === 'pause-form') { const invoice = invoices.find((i) => i.id === form.dataset.id)!; invoice.pausedUntil = String(data.get('pausedUntil')); invoice.pauseNote = String(data.get('pauseNote')).trim(); invoice.updatedAt = new Date().toISOString(); await persistInvoices(); form.closest('dialog')?.close(); rerender(`${invoice.client} paused until ${formatDate(invoice.pausedUntil)}.`); }
   if (form.id === 'profile-form') { settings.senderName = String(data.get('senderName')).trim(); settings.businessName = String(data.get('businessName')).trim(); await persistSettings(); rerender('Your sign-off was saved.'); }
   if (form.classList.contains('template-sheet')) { const stage = settings.templates.find((s) => s.id === form.dataset.template)!; stage.name = String(data.get('name')).trim(); stage.afterDays = Number(data.get('afterDays')); stage.subject = String(data.get('subject')).trim(); stage.body = String(data.get('body')).trim(); await persistSettings(); rerender('Cadence step saved.'); }
-  if (form.id === 'license-form') { const token = String(data.get('license')).trim(); if (token) { localStorage.setItem('sb_license:payment-cadence', token); await verifyLicense(token, true); } }
+  if (form.id === 'license-form') { const token = String(data.get('license')).trim(); if (token) { setLicenseToken(token); await verifyLicense(token); } }
 });
 
 document.addEventListener('change', async (event) => {
@@ -261,32 +262,60 @@ async function markSent() {
 function download(name: string, value: string, type: string) { const url = URL.createObjectURL(new Blob([value], { type })); const link = document.createElement('a'); link.href = url; link.download = name; link.click(); URL.revokeObjectURL(url); }
 function exportCsv() { const cells = (values: unknown[]) => values.map((v) => `"${String(v ?? '').replaceAll('"', '""')}"`).join(','); const rows = [cells(['Client','Email','Invoice','Amount','Currency','Due date','Status','Private note']), ...invoices.map((i) => cells([i.client,i.email,i.number,i.amount,i.currency,i.dueDate,i.status,i.note]))]; download('gentle-nudge-invoices.csv', rows.join('\n'), 'text/csv'); }
 
-async function verifyLicense(token: string, force = false) {
-  const cacheKey = 'sb_license_verdict:payment-cadence';
-  let cached: { valid: boolean; at: number } | null = null;
-  try { cached = JSON.parse(localStorage.getItem(cacheKey) || 'null') as { valid: boolean; at: number } | null; } catch { localStorage.removeItem(cacheKey); }
-  if (cached?.valid) unlocked = true;
-  if (!force && cached && Date.now() - cached.at < 86400000) return;
+type LicenseVerdict = { token?: string; valid: boolean; at: number };
+const licenseKey = 'sb_license:payment-cadence';
+const licenseVerdictKey = 'sb_license_verdict:payment-cadence';
+const oneDay = 86400000;
+
+function readLicenseVerdict(): LicenseVerdict | null {
+  try {
+    const cached = JSON.parse(localStorage.getItem(licenseVerdictKey) || 'null') as LicenseVerdict | null;
+    return cached && typeof cached.valid === 'boolean' && typeof cached.at === 'number' ? cached : null;
+  } catch { localStorage.removeItem(licenseVerdictKey); return null; }
+}
+
+function inactiveLicenseNotice() {
+  return 'This license is not active. The free workspace is still available. Buy Plus or paste a different license below.';
+}
+
+function setLicenseToken(token: string) {
+  const previous = localStorage.getItem(licenseKey);
+  localStorage.setItem(licenseKey, token);
+  if (previous !== token) localStorage.removeItem(licenseVerdictKey);
+}
+
+async function verifyLicense(token: string) {
+  const cached = readLicenseVerdict();
+  const cachedForToken = cached && (!cached.token || cached.token === token) ? cached : null;
+  if (cachedForToken) {
+    unlocked = cachedForToken.valid;
+    licenseNotice = cachedForToken.valid ? '' : inactiveLicenseNotice();
+  }
+  if (cachedForToken && Date.now() - cachedForToken.at < oneDay) return;
   try {
     const response = await fetch(`https://api.sociobot.in/api/v1/products/payment-cadence/verify?license=${encodeURIComponent(token)}`);
     if (!response.ok) throw new Error('Verification is temporarily unavailable.');
     const result = await response.json() as { valid: boolean; reason: string };
-    unlocked = result.valid; localStorage.setItem(cacheKey, JSON.stringify({ valid: result.valid, at: Date.now() }));
-    if (result.valid) { rerender('Gentle Nudge Plus is active.'); }
-    else { localStorage.removeItem(cacheKey); rerender('That license is no longer active. The free workspace is still available.'); }
-  } catch { if (force) { const note = document.querySelector('#license-note'); if (note) note.textContent = 'Could not verify right now. Check your connection and try again.'; } }
+    unlocked = result.valid; localStorage.setItem(licenseVerdictKey, JSON.stringify({ token, valid: result.valid, at: Date.now() }));
+    if (result.valid) { licenseNotice = ''; rerender('Gentle Nudge Plus is active.'); }
+    else { licenseNotice = inactiveLicenseNotice(); rerender('That license is not active. The free workspace is still available.'); }
+  } catch {
+    licenseNotice = 'Could not verify right now. Check your connection and try again.';
+    const note = document.querySelector('#license-note'); if (note) note.textContent = licenseNotice;
+  }
 }
 
-function initLicense(): { token: string; force: boolean } | null {
+function initLicense(): { token: string } | null {
   const params = new URLSearchParams(location.search); const incoming = params.get('license');
-  if (incoming) { localStorage.setItem('sb_license:payment-cadence', incoming); params.delete('license'); history.replaceState({}, '', `${location.pathname}${params.size ? `?${params}` : ''}${location.hash}`); }
-  const token = incoming || localStorage.getItem('sb_license:payment-cadence');
+  if (incoming) { setLicenseToken(incoming); params.delete('license'); history.replaceState({}, '', `${location.pathname}${params.size ? `?${params}` : ''}${location.hash}`); }
+  const token = incoming || localStorage.getItem(licenseKey);
   if (!token) return null;
-  try {
-    const cached = JSON.parse(localStorage.getItem('sb_license_verdict:payment-cadence') || 'null') as { valid?: boolean } | null;
-    unlocked = cached?.valid === true;
-  } catch { localStorage.removeItem('sb_license_verdict:payment-cadence'); }
-  return { token, force: Boolean(incoming) };
+  const cached = readLicenseVerdict();
+  if (cached && (!cached.token || cached.token === token)) {
+    unlocked = cached.valid;
+    if (!cached.valid) licenseNotice = inactiveLicenseNotice();
+  }
+  return { token };
 }
 
 function connectivity() { const banner = document.querySelector<HTMLElement>('#offline-banner'); if (banner) banner.hidden = navigator.onLine; }
@@ -303,7 +332,7 @@ async function init() {
   if (isLegalPage()) { legalPage(location.pathname.startsWith('/privacy') ? 'privacy' : 'terms'); return; }
   try { ({ invoices, settings } = await loadWorkspace()); } catch (error) { loadError = error instanceof BackupValidationError ? 'Some saved records are incomplete or damaged.' : error instanceof Error ? error.message : 'Local storage is unavailable. Check your browser privacy settings.'; }
   const license = initLicense(); shell(); void registerWorker();
-  if (license) void verifyLicense(license.token, license.force);
+  if (license) void verifyLicense(license.token);
 }
 
 void init();

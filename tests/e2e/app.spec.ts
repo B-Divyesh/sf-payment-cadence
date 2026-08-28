@@ -101,6 +101,53 @@ test('renders the free workspace before license verification returns', async ({ 
   expect(new URL(page.url()).searchParams.has('license')).toBe(false);
 });
 
+test('caches an invalid license verdict for a day and keeps a replace-license path', async ({ page }) => {
+  let requests = 0;
+  await page.route('https://api.sociobot.in/api/v1/products/payment-cadence/verify?*', async (route) => {
+    requests += 1;
+    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ valid: false, reason: 'invalid', expires_at: null }) });
+  });
+  await page.goto('/?license=qa-invalid-cache');
+  await expect.poll(() => requests).toBe(1);
+  const verdict = await page.evaluate(() => JSON.parse(localStorage.getItem('sb_license_verdict:payment-cadence') || 'null'));
+  expect(verdict).toMatchObject({ token: 'qa-invalid-cache', valid: false });
+  expect(typeof verdict.at).toBe('number');
+  await page.reload();
+  await page.waitForTimeout(250);
+  expect(requests).toBe(1);
+  await page.getByRole('button', { name: 'Settings' }).click();
+  await expect(page.locator('#license-note')).toContainText('This license is not active');
+  await expect(page.getByRole('link', { name: 'Buy Plus' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Restore purchase' })).toBeVisible();
+});
+
+test('keeps every primary mobile workspace screen usable at 200% text size', async ({ page }) => {
+  test.skip(test.info().project.name !== 'mobile', 'This regression reproduces the 390px mobile text-size setting.');
+  await page.goto('/');
+  await page.evaluate(() => { document.documentElement.style.fontSize = '200%'; });
+  const assertReflow = async () => {
+    await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true);
+  };
+  const assertReachable = async (locator: ReturnType<typeof page.getByRole>) => {
+    await locator.scrollIntoViewIfNeeded();
+    await expect.poll(() => locator.evaluate((element) => {
+      const box = element.getBoundingClientRect();
+      return box.left >= 0 && box.right <= window.innerWidth;
+    })).toBe(true);
+  };
+  await assertReflow();
+  await assertReachable(page.getByRole('button', { name: 'Add your first invoice' }));
+  await page.getByRole('button', { name: 'Add your first invoice' }).click();
+  await assertReflow();
+  await assertReachable(page.getByLabel('Client name'));
+  await page.getByRole('button', { name: 'Cancel' }).click();
+  await page.getByRole('button', { name: 'Cadence' }).click();
+  await assertReflow();
+  await page.getByRole('button', { name: 'Settings' }).click();
+  await assertReflow();
+  await assertReachable(page.getByRole('button', { name: 'Restore purchase' }));
+});
+
 test('uses the registered Sociobot checkout for both Plus purchase links', async ({ page }) => {
   const checkout = 'https://api.sociobot.in/api/v1/products/payment-cadence/checkout';
   await page.goto('/');
