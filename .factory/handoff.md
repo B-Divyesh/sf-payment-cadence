@@ -1,44 +1,36 @@
-# Gentle Nudge release-repair handoff
+# Gentle Nudge independent QA handoff
 
-## Outcome
+## Outcome — FAIL
 
-Release repair `payment-cadence-repair-1` resolves every blocker reported in verifier commit `00e91d8b2409d69178f0fc56fdc7531d242409d3` against candidate `cc5f3a9d8e6e1029efbed46cb49a8a394c770bd3`. The repaired static PWA is deployed at <https://payment-cadence.sociobot.in>.
+Independent verification work order `payment-cadence-verify-2` tested candidate `c3faf013295913237c4763414c48a154f7aeabea` and <https://payment-cadence.sociobot.in> on 28 August 2026.
 
-## Repairs
+The application, build, and live deployment pass their functional, PWA, accessibility, privacy, performance, and identity checks. The earlier release defects are repaired. Final acceptance is **FAIL** because the production Sociobot license-verification endpoint did not return HTTP 429 or `Retry-After` during either a 250-request sequential burst or a 300-request concurrent burst. The observed threshold was **none through 550 rapid requests**.
 
-- Registered and enabled the production `payment-cadence` billing product as **Gentle Nudge Plus**, a one-time **US $18** purchase. The required Sociobot checkout endpoint now returns HTTP 303 to `checkout.dodopayments.com`; no payment provider is embedded in the app.
-- Added complete runtime validation for imported invoices, reminder histories, settings, and cadence templates. The verifier’s incomplete-invoice payload is rejected before any write, and valid merged imports are saved in one IndexedDB transaction.
-- Added an in-app recovery state for data damaged by an older build: users can download the raw recovery JSON, then explicitly confirm a local reset.
-- Made license startup non-blocking. Incoming tokens are stored and removed from the URL, a cached valid verdict is applied synchronously, the free shell renders, and network reconciliation continues in the background.
-- Expanded the masthead wordmark and footer legal links to at least 44×44 CSS px without changing the product-specific editorial layout.
-- Added `staticwebapp.config.json` with CSP, `frame-ancestors 'none'`, `X-Frame-Options: DENY`, Permissions-Policy, immutable one-year asset/font caching, no-store service-worker caching, and correct Web Manifest/AVIF MIME mappings. The host config is excluded from the service-worker precache.
-- Added repeatable live verification plus exact unit/browser regressions for every application-side finding.
+## Release-blocking defect
 
-## Verification evidence — 28 August 2026 UTC
+- **P1 — Missing observable billing verification rate limit.** All 550 requests to `/api/v1/products/payment-cadence/verify` returned 200 in two bursts completed in 2.769 s and 2.229 s. No rate-limit headers appeared. Add a bounded API-side limit with 429 and `Retry-After`, then rerun independent verification.
 
-Clean local gates:
+Full evidence and reproduction details are in [`.factory/verification-2.md`](verification-2.md).
 
-- `npm ci`: 59 packages installed; 0 vulnerabilities.
-- `npm test`: 8/8 Vitest tests and 16/16 Playwright tests passed across desktop Chromium and 390×844 mobile Chromium.
-- `npx tsc --noEmit`: passed. No separate lint tool is configured.
-- `npm audit --audit-level=high`: passed with 0 vulnerabilities.
-- `npm run build`: passed and produced `dist/index.html`, direct privacy/terms entries, manifest, icons, and versioned `sw.js`.
-- Independent verifier suite: 36/36 checks passed with zero console errors, page errors, or failed requests. This includes the exact malformed import, the original successful workflows, axe, reduced motion, offline reload, and the service-worker update toast.
+## Passing evidence
 
-Targeted regression coverage:
-
-- `tests/backup.test.ts`: complete backups accepted; verifier poison payload rejected; malformed history/template records rejected; static response policy asserted.
-- `tests/e2e/app.spec.ts`: rejected imports survive reload without changing storage; pre-existing damaged IndexedDB exposes recovery download/reset; a 1.2-second license response cannot delay `<main>`; both purchase links use the Sociobot endpoint; every visible target is at least 44×44 px.
-
-Deployed checks:
-
-- `npm run verify:live`: 24/24 checks passed for byte identity, headers/MIME/cache, billing catalog and checkout, desktop/mobile axe, console, request privacy, keyboard skip navigation, 390px targets/overflow, and offline reload.
-- Factory `verify-url.sh`: HTTP 200 in 780 ms; title, `lang`, one `<h1>`, and `<main>` present; zero missing alts, unlabeled buttons, console errors, or page errors.
-- Lighthouse 12.8.2 mobile: Performance 100, Accessibility 100, Best Practices 100; FCP 0.9 s, LCP 1.2 s, TBT 0 ms, CLS 0, interactive 1.2 s; 5 requests, 0 third-party requests, 57,117 transferred bytes.
-- Live local/build identity matched SHA-256 for `index.html` (`72d38b778a9e5846b2ac883377c4ea544a0d40b275f252c17d6f0b5bdda8debd`), `sw.js` (`e1d5a8f91789c0bc891d5ec44b5720609bb82021367735f5a430e3b364702ef9`), manifest, hashed JS, and hashed CSS.
-- Live response checks: CSP/anti-framing/Permissions-Policy present; hashed JS is `public, max-age=31536000, immutable`; manifest is `application/manifest+json`; AVIF is `image/avif`.
-- Build budgets: JS 33.50 KB raw / 11.35 KB gzip; CSS 18.14 KB raw / 4.91 KB gzip; font 18.10 KB; 640px AVIF 8.79 KB; total `dist/` 254,797 bytes.
-- Live screenshots at 1440×900 and 390×844 were visually reviewed with no clipping or horizontal overflow.
+- Clean checkout exactly matched the candidate before testing.
+- `npm ci`: pass, 59 packages, 0 vulnerabilities.
+- `npm test`: pass, 8 Vitest and 16 Playwright tests.
+- `npx tsc --noEmit`: pass; no lint command is configured.
+- `npm audit --audit-level=high`: pass, 0 vulnerabilities.
+- `npm run build`: pass; exact `dist/` produced.
+- Independent product suite: 36/36 pass.
+- Live verifier: 24/24 pass.
+- All 18 public build artifacts matched the live deployment byte-for-byte.
+- Factory URL verifier: HTTP 200, 664 ms load, correct semantics, no console/page errors.
+- Core prepare-review-copy/email-draft-explicit-send flow, editable templates, pause notes, paid/reopen, persistence, JSON/CSV export, delete/restore, malformed import recovery, free/Plus boundaries, and license startup/cache behavior passed.
+- Desktop and 390 px mobile visual review, keyboard-only creation, visible focus, reduced motion, 44 px targets, dynamic-state axe, and no-overflow checks passed. Axe serious/critical findings: 0.
+- Offline reload passed locally and live; service-worker update notification and PWA installability passed.
+- Production checkout redirects to hosted Dodo and the catalog price is USD 18.00. A real payment was not completed.
+- Response security, MIME, CORS, ETag, and cache policies passed.
+- Lighthouse mobile runs: Performance 87/100/100 (median 100), Accessibility 100/100, Best Practices 100/100; median LCP 1.29 s, CLS 0. The one low run was an unattributable-host TBT outlier; both repeats had 0 ms TBT.
+- Budgets pass: 33.5 KB JS, 18.1 KB CSS, 18.1 KB font, 8.8 KB mobile AVIF, 254,797-byte `dist/`.
 
 ## Run and verify
 
@@ -51,15 +43,8 @@ npm run build
 npm run verify:live
 ```
 
-Deployment command:
+## Boundaries and next step
 
-```sh
-/opt/fleet/lib/deploy-static.sh payment-cadence /work/repo/dist
-```
-
-## Known boundaries / next steps
-
-- Data remains intentionally device-local. Cross-device movement uses JSON backup/import and license paste.
-- `mailto:` requires a configured system email handler; copy remains the reliable fallback.
-- Live catalog and hosted-checkout creation were verified without completing a real card charge. Webhook grant/revocation behavior remains owned by the shared Sociobot billing service rather than this static repository.
-- No library/CLI consumer package or backend concurrency/health surface exists for this static PWA, so those checks are not applicable.
+- This is a static local-first PWA; library/CLI packaging, backend concurrency/health, and sign-in/Entra checks do not apply.
+- Data stays in IndexedDB and moves between devices through explicit JSON backup/import. `mailto:` requires a configured email handler; copy remains the fallback.
+- The static product needs no code change for the discovered blocker. Repair rate limiting in the shared production billing API, verify 429 plus `Retry-After`, then rerun the release audit.
