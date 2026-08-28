@@ -32,13 +32,15 @@ Open the local URL printed by Vite. No environment variables or external service
 
 ```sh
 npm test        # unit + Chromium desktop/390px + offline + axe checks
+npx tsc --noEmit
 npm run build   # reproducible static output in dist/
 npm run preview # preview dist/ locally
+npm run verify:live # deployed identity, headers, checkout, browser, axe, and offline checks
 ```
 
 Playwright is pinned to `1.58.2`. The factory image already provides its Chromium browser; elsewhere run `npx playwright install chromium` once if needed.
 
-Static deployment must publish `dist/` with history/direct-path fallback enabled for convenience; independent `privacy/index.html` and `terms/index.html` files are included. The generated service worker precaches the built, hashed shell.
+Static deployment must publish `dist/` with history/direct-path fallback enabled for convenience; independent `privacy/index.html` and `terms/index.html` files are included. The generated service worker precaches the built, hashed shell. `public/staticwebapp.config.json` carries the production security, MIME, and cache policy for Azure Static Web Apps.
 
 ## Privacy and limits
 
