@@ -1,0 +1,10 @@
+@media (max-width: 640px) {
+  .hero-art {
+    max-height: none;
+    overflow: hidden;
+  }
+
+  .hero-art img {
+    height: auto;
+  }
+}
