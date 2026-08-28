@@ -41,3 +41,82 @@ test('legal pages have the expected landmarks', async ({ page }) => {
   await page.goto('/terms/');
   await expect(page).toHaveTitle(/Terms/);
 });
+
+test('rejects an incomplete backup without changing persistent data', async ({ page }) => {
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Settings' }).click();
+  const poison = {
+    invoices: [{ id: 'bad', status: 'active', dueDate: '2020-01-01' }],
+    settings: {
+      senderName: '', businessName: '',
+      templates: [{ id: 'due', afterDays: 0, name: 'Due', tone: 'Due', subject: 'x', body: 'x' }]
+    }
+  };
+  await page.getByLabel('Import backup').setInputFiles({
+    name: 'malformed-backup.json',
+    mimeType: 'application/json',
+    buffer: Buffer.from(JSON.stringify(poison))
+  });
+  await expect(page.locator('#toast')).toContainText('Nothing was imported');
+  await page.reload();
+  await expect(page.getByRole('main')).toBeVisible();
+  await expect(page.getByText('Nothing sends automatically')).toBeVisible();
+});
+
+test('offers an in-app recovery path for previously damaged storage', async ({ page }) => {
+  await page.goto('/');
+  await page.evaluate(async () => {
+    const database = await new Promise<IDBDatabase>((resolve, reject) => {
+      const request = indexedDB.open('gentle-nudge', 1);
+      request.onsuccess = () => resolve(request.result);
+      request.onerror = () => reject(request.error);
+    });
+    await new Promise<void>((resolve, reject) => {
+      const transaction = database.transaction('workspace', 'readwrite');
+      transaction.objectStore('workspace').put([{ id: 'bad', status: 'active', dueDate: '2020-01-01' }], 'invoices');
+      transaction.oncomplete = () => resolve();
+      transaction.onerror = () => reject(transaction.error);
+    });
+    database.close();
+  });
+  await page.reload();
+  await expect(page.getByRole('heading', { name: 'Your workspace could not open.' })).toBeVisible();
+  const recovery = page.waitForEvent('download');
+  await page.getByRole('button', { name: 'Download recovery copy' }).click();
+  expect((await recovery).suggestedFilename()).toBe('gentle-nudge-recovery.json');
+  page.once('dialog', (dialog) => dialog.accept());
+  await page.getByRole('button', { name: 'Reset local workspace' }).click();
+  await expect(page.getByText('Nothing sends automatically')).toBeVisible();
+});
+
+test('renders the free workspace before license verification returns', async ({ page }) => {
+  await page.route('https://api.sociobot.in/api/v1/products/payment-cadence/verify?*', async (route) => {
+    await new Promise((resolve) => setTimeout(resolve, 1_200));
+    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ valid: false, reason: 'invalid', expires_at: null }) });
+  });
+  await page.goto('/?license=qa-token', { waitUntil: 'domcontentloaded' });
+  await expect(page.getByRole('main')).toBeVisible({ timeout: 500 });
+  await expect(page.getByText('Nothing sends automatically')).toBeVisible({ timeout: 500 });
+  expect(await page.evaluate(() => localStorage.getItem('sb_license:payment-cadence'))).toBe('qa-token');
+  expect(new URL(page.url()).searchParams.has('license')).toBe(false);
+});
+
+test('uses the registered Sociobot checkout for both Plus purchase links', async ({ page }) => {
+  const checkout = 'https://api.sociobot.in/api/v1/products/payment-cadence/checkout';
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Cadence' }).click();
+  await expect(page.getByRole('link', { name: 'Unlock Plus' })).toHaveAttribute('href', checkout);
+  await page.getByRole('button', { name: 'Settings' }).click();
+  await expect(page.getByRole('link', { name: 'Buy Plus' })).toHaveAttribute('href', checkout);
+});
+
+test('all visible controls meet the 44px target minimum', async ({ page }) => {
+  await page.goto('/');
+  const smallTargets = await page.locator('a,button,input,select,textarea').evaluateAll((elements) => elements
+    .filter((element) => {
+      const bounds = element.getBoundingClientRect();
+      return bounds.width > 0 && bounds.height > 0 && (bounds.width < 44 || bounds.height < 44);
+    })
+    .map((element) => ({ label: element.textContent?.trim(), bounds: element.getBoundingClientRect().toJSON() })));
+  expect(smallTargets).toEqual([]);
+});

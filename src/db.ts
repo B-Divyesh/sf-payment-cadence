@@ -1,5 +1,6 @@
 import type { Invoice, Settings } from './model';
 import { defaultSettings } from './model';
+import { parseWorkspaceBackup } from './backup';
 
 const DB_NAME = 'gentle-nudge';
 const DB_VERSION = 1;
@@ -39,10 +40,30 @@ export async function setValue<T>(key: string, value: T): Promise<void> {
 
 export async function loadWorkspace(): Promise<{ invoices: Invoice[]; settings: Settings }> {
   const [invoices, settings] = await Promise.all([
-    getValue<Invoice[]>('invoices', []),
-    getValue<Settings>('settings', structuredClone(defaultSettings))
+    getValue<unknown>('invoices', []),
+    getValue<unknown>('settings', structuredClone(defaultSettings))
+  ]);
+  return parseWorkspaceBackup({ invoices, settings });
+}
+
+export async function getRawWorkspace(): Promise<{ invoices: unknown; settings: unknown }> {
+  const [invoices, settings] = await Promise.all([
+    getValue<unknown>('invoices', []),
+    getValue<unknown>('settings', structuredClone(defaultSettings))
   ]);
   return { invoices, settings };
+}
+
+export async function saveWorkspace(workspace: { invoices: Invoice[]; settings: Settings }): Promise<void> {
+  const db = await openDb();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(STORE, 'readwrite');
+    tx.objectStore(STORE).put(workspace.invoices, 'invoices');
+    tx.objectStore(STORE).put(workspace.settings, 'settings');
+    tx.oncomplete = () => { db.close(); resolve(); };
+    tx.onerror = () => { db.close(); reject(tx.error ?? new Error('Could not save the imported backup.')); };
+    tx.onabort = () => { db.close(); reject(tx.error ?? new Error('Could not save the imported backup.')); };
+  });
 }
 
 export async function clearWorkspace(): Promise<void> {

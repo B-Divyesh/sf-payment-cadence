@@ -1,7 +1,8 @@
 import './style.css';
 import './contrast.css';
 import './responsive.css';
-import { clearWorkspace, loadWorkspace, setValue } from './db';
+import { clearWorkspace, getRawWorkspace, loadWorkspace, saveWorkspace, setValue } from './db';
+import { BackupValidationError, parseWorkspaceBackup } from './backup';
 import {
   defaultSettings, daysBetween, fillTemplate, formatDate, formatMoney, invoiceStatus,
   isPaused, localDate, needsAttention, stageFor,
@@ -75,7 +76,7 @@ function sectionEyebrow() {
 }
 
 function renderView(): string {
-  if (loadError) return `<section class="error-state" role="alert"><p class="eyebrow">Storage problem</p><h2>Your workspace could not open.</h2><p>${e(loadError)}</p><button class="button secondary" data-action="reload">Try again</button></section>`;
+  if (loadError) return `<section class="error-state" role="alert"><p class="eyebrow">Storage problem</p><h2>Your workspace could not open.</h2><p>${e(loadError)}</p><p>Download a recovery copy before resetting this device’s workspace. You may be able to repair and import that JSON later.</p><div class="button-cluster"><button class="button secondary" data-action="download-recovery">Download recovery copy</button><button class="button primary" data-action="reset-storage">Reset local workspace</button><button class="button text" data-action="reload">Try again</button></div></section>`;
   if (view === 'today') return renderToday();
   if (view === 'invoices') return renderInvoices();
   if (view === 'templates') return renderTemplates();
@@ -203,6 +204,8 @@ document.addEventListener('click', async (event) => {
   if (action === 'export-json') download('gentle-nudge-backup.json', JSON.stringify({ version: 1, exportedAt: new Date().toISOString(), invoices, settings }, null, 2), 'application/json');
   if (action === 'export-csv') exportCsv();
   if (action === 'delete-all' && confirm('Delete every invoice, note, template change, and reminder history from this device? This cannot be undone.')) { await clearWorkspace(); invoices = []; settings = structuredClone(defaultSettings); rerender('All local workspace data was deleted.'); }
+  if (action === 'download-recovery') { const raw = await getRawWorkspace(); download('gentle-nudge-recovery.json', JSON.stringify({ version: 1, recoveredAt: new Date().toISOString(), ...raw }, null, 2), 'application/json'); }
+  if (action === 'reset-storage' && confirm('Reset this damaged local workspace? Download a recovery copy first if you may need these records.')) { await clearWorkspace(); invoices = []; settings = structuredClone(defaultSettings); loadError = ''; rerender('The local workspace was reset and is ready to use.'); }
 });
 
 document.addEventListener('submit', async (event) => {
@@ -228,10 +231,10 @@ document.addEventListener('change', async (event) => {
   const input = event.target as HTMLInputElement;
   if (input.id !== 'import-file' || !input.files?.[0]) return;
   try {
-    const parsed = JSON.parse(await input.files[0].text()) as { invoices?: Invoice[]; settings?: Settings };
-    if (!Array.isArray(parsed.invoices) || !parsed.settings?.templates) throw new Error('That file is not a Gentle Nudge backup.');
+    const parsed = parseWorkspaceBackup(JSON.parse(await input.files[0].text()));
     const merged = new Map(invoices.map((i) => [i.id, i])); parsed.invoices.forEach((i) => merged.set(i.id, i));
-    invoices = [...merged.values()]; settings = parsed.settings; await Promise.all([persistInvoices(), persistSettings()]); rerender(`Imported ${parsed.invoices.length} invoice${parsed.invoices.length === 1 ? '' : 's'}.`);
+    const next = parseWorkspaceBackup({ invoices: [...merged.values()], settings: parsed.settings });
+    await saveWorkspace(next); invoices = next.invoices; settings = next.settings; rerender(`Imported ${parsed.invoices.length} invoice${parsed.invoices.length === 1 ? '' : 's'}.`);
   } catch (error) { toast(error instanceof Error ? error.message : 'The backup could not be imported.'); }
   input.value = '';
 });
@@ -260,7 +263,8 @@ function exportCsv() { const cells = (values: unknown[]) => values.map((v) => `"
 
 async function verifyLicense(token: string, force = false) {
   const cacheKey = 'sb_license_verdict:payment-cadence';
-  const cached = JSON.parse(localStorage.getItem(cacheKey) || 'null') as { valid: boolean; at: number } | null;
+  let cached: { valid: boolean; at: number } | null = null;
+  try { cached = JSON.parse(localStorage.getItem(cacheKey) || 'null') as { valid: boolean; at: number } | null; } catch { localStorage.removeItem(cacheKey); }
   if (cached?.valid) unlocked = true;
   if (!force && cached && Date.now() - cached.at < 86400000) return;
   try {
@@ -273,10 +277,16 @@ async function verifyLicense(token: string, force = false) {
   } catch { if (force) { const note = document.querySelector('#license-note'); if (note) note.textContent = 'Could not verify right now. Check your connection and try again.'; } }
 }
 
-async function initLicense() {
+function initLicense(): { token: string; force: boolean } | null {
   const params = new URLSearchParams(location.search); const incoming = params.get('license');
   if (incoming) { localStorage.setItem('sb_license:payment-cadence', incoming); params.delete('license'); history.replaceState({}, '', `${location.pathname}${params.size ? `?${params}` : ''}${location.hash}`); }
-  const token = incoming || localStorage.getItem('sb_license:payment-cadence'); if (token) await verifyLicense(token, Boolean(incoming));
+  const token = incoming || localStorage.getItem('sb_license:payment-cadence');
+  if (!token) return null;
+  try {
+    const cached = JSON.parse(localStorage.getItem('sb_license_verdict:payment-cadence') || 'null') as { valid?: boolean } | null;
+    unlocked = cached?.valid === true;
+  } catch { localStorage.removeItem('sb_license_verdict:payment-cadence'); }
+  return { token, force: Boolean(incoming) };
 }
 
 function connectivity() { const banner = document.querySelector<HTMLElement>('#offline-banner'); if (banner) banner.hidden = navigator.onLine; }
@@ -291,8 +301,9 @@ async function registerWorker() {
 
 async function init() {
   if (isLegalPage()) { legalPage(location.pathname.startsWith('/privacy') ? 'privacy' : 'terms'); return; }
-  try { ({ invoices, settings } = await loadWorkspace()); } catch (error) { loadError = error instanceof Error ? error.message : 'Local storage is unavailable. Check your browser privacy settings.'; }
-  await initLicense(); shell(); await registerWorker();
+  try { ({ invoices, settings } = await loadWorkspace()); } catch (error) { loadError = error instanceof BackupValidationError ? 'Some saved records are incomplete or damaged.' : error instanceof Error ? error.message : 'Local storage is unavailable. Check your browser privacy settings.'; }
+  const license = initLicense(); shell(); void registerWorker();
+  if (license) void verifyLicense(license.token, license.force);
 }
 
 void init();

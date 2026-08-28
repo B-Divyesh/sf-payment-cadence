@@ -13,7 +13,7 @@ async function walk(directory) {
 const root = new URL('../dist/', import.meta.url).pathname;
 const files = (await walk(root))
   .map((path) => `/${relative(root, path)}`)
-  .filter((path) => path !== '/sw.js' && !path.endsWith('.map'));
+  .filter((path) => path !== '/sw.js' && path !== '/staticwebapp.config.json' && !path.endsWith('.map'));
 const packageJson = JSON.parse(await readFile(new URL('../package.json', import.meta.url), 'utf8'));
 const cacheName = `gentle-nudge-${packageJson.version}`;
 const worker = `
