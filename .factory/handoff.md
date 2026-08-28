@@ -1,36 +1,55 @@
-# Gentle Nudge independent QA handoff
+# Gentle Nudge repair handoff
 
-## Outcome — FAIL
+## Outcome — PASS
 
-Independent verification work order `payment-cadence-verify-3` tested candidate `c3faf013295913237c4763414c48a154f7aeabea` and <https://payment-cadence.sociobot.in> on 28 August 2026.
+Repair work order `payment-cadence-repair-2` repaired every release-blocking finding in independent verification commit `3745109d66fe8d4fd4a5a346d08f879a934b4a08`, which tested candidate `c3faf013295913237c4763414c48a154f7aeabea`.
 
-The prior deployment-only blocker is repaired: a fresh 80-request verification burst produced 30 HTTP 200 responses and 50 HTTP 429 responses, all 429s carrying `Retry-After: 4`. Final acceptance remains **FAIL** because two application defects reproduce locally and live.
+Repair commit: `5e934739c96b39f0e07e0a52809cb568e765625f` (`fix: preserve license cache and mobile text reflow`). It is pushed to `origin/main` and deployed to the existing static Azure Static Web App at <https://payment-cadence.sociobot.in>.
 
-## Release-blocking defects
+## Repairs
 
-- **P2 — Mobile content is lost at 200% text size.** At 390×844 with text enlarged to 200%, document width becomes 530 px and the centered 530 px welcome copy begins at x=-70. The hero heading, supporting copy, reassurance, and primary first-invoice action lose their left edge outside the scrollable canvas.
-- **P2 — Negative license verdicts bypass the daily cache.** An invalid token is retained but its timestamped verdict is deleted. Both controlled local testing and the real live endpoint received a second verification request on immediate reload, violating the “at most once per day” paid-unlock contract. Valid verdict caching works.
+- **390 px / 200% text reflow:** The mobile welcome flex item now has an explicit zero intrinsic minimum and a viewport-bounded maximum. Its editorial heading can wrap at enlarged text sizes. The prior reproduction widened the document to 530 px and centered the copy at x=-70; the repaired live reproduction is 390/390 px with welcome copy x=16, width=358, and the first-invoice action fully reachable after normal vertical scrolling.
+- **Negative license cache:** License verdicts are now token-bound and timestamped for both `valid:true` and `valid:false` results. A cached result is respected for 24 hours, including when the stored license is invalid. Replacing a token clears only the prior verdict, so a new token can be checked. The Settings screen now retains a quiet inactive-license notice alongside Buy Plus and Restore purchase rather than relying on a transient toast.
 
-No P0 or P1 defect was found. Full evidence and reproduction details are in [`.factory/verification-3.md`](verification-3.md).
+## Regression coverage
 
-## Passing evidence
+`tests/e2e/app.spec.ts` adds:
 
-- Clean checkout exactly matched the candidate before testing.
-- `npm ci`: pass, 59 packages, 0 vulnerabilities.
-- `npm test`: pass, 8 Vitest and 16 Playwright tests.
-- `npx tsc --noEmit`: pass; no lint command is configured.
-- `npm audit --audit-level=high`: pass, 0 vulnerabilities.
-- `npm run build`: pass; exact `dist/` produced.
-- Independent workflow suite: 36/36 pass; live verifier: 24/24 pass.
-- All 18 public build artifacts matched production byte-for-byte.
-- Core reminder, template, pause, history, paid/reopen, export/import/delete/recovery, free-limit, mailto/copy, keyboard-only, persistence, and invalid-input paths passed.
-- Normal desktop and 390 px mobile layouts passed visual review, 44 px target, focus, overflow, reduced-motion, and stable-state axe checks; axe serious/critical findings: 0.
-- Offline mutation/reload, live offline reload, service-worker update feedback, manifest parsing, and installability passed.
-- Privacy/outbound-request checks and production security/MIME/cache policies passed; normal use made no third-party requests.
-- Lighthouse 13.4.1 mobile: Performance 99, Accessibility 100, Best Practices 100; LCP 1.3 s, TBT 90 ms, CLS 0; 79,643 transferred bytes and zero third-party requests.
-- Budgets pass: 33.5 KB JS, 18.1 KB CSS, 18.1 KB font, 8.8 KB mobile AVIF, 254,797-byte `dist/`.
+- an invalid-verdict flow that asserts the persisted `{ token, valid:false, at }` record, one verification request across a reload, and the persistent replacement/purchase path;
+- a 390×844 mobile test with `document.documentElement.style.fontSize = '200%'` across welcome, invoice dialog, Cadence, and Settings. It asserts no document overflow and that the key controls are horizontally reachable.
 
-## Run and verify
+## Verification evidence
+
+All work was run against the repaired tree, then the deployed artifact was checked again.
+
+| Check | Result |
+| --- | --- |
+| `npm ci` | PASS — clean install, 59 packages, 0 vulnerabilities |
+| `npm test` | PASS — 8/8 Vitest; 19/19 applicable Playwright checks across desktop and 390 px mobile (one desktop skip for the mobile-only 200% reflow case) |
+| `npx tsc --noEmit` | PASS |
+| `npm audit --audit-level=high` | PASS — 0 vulnerabilities |
+| `npm run build` | PASS — `dist/` produced; JS 33.68 KB raw / 11.46 KB gzip, CSS 18.26 KB raw / 4.94 KB gzip |
+| Independent workflow suite | PASS — 36/36 checks; no console errors, page errors, or failed requests |
+| `npm run verify:live` after deployment | PASS — 24/24 identity, headers, cache/MIME, checkout, desktop/mobile semantic/axe, keyboard, privacy/network, and offline checks |
+| Live 390×844 at 200% text | PASS — scroll width/client width 390/390; welcome x=16/width=358; first action horizontally reachable; zero console errors |
+| Live billing verification burst | PASS — 40 concurrent invalid requests: 30 HTTP 200, 10 HTTP 429; every 429 supplied `Retry-After` |
+
+The checked-in independent script injects axe inline and is correctly blocked by the product's production CSP. Its source was not changed; a temporary `/tmp` copy used Playwright `bypassCSP:true` solely for its axe injection. That complete local run passed 36/36. The regular product Playwright suite also runs axe normally against the local preview.
+
+PWA offline reload, service-worker update feedback, keyboard-only workflow, focus behavior, reduced motion, malformed-import recovery, exports, privacy/network boundaries, plus licensing, and the existing full reminder workflow all remain covered by these suites.
+
+## Deploy
+
+Built `dist/` was deployed directly with the configured static target:
+
+```sh
+swa deploy ./dist --swa-config-location ./public \
+  --app-name sf-payment-cadence --resource-group sociobot --env production
+```
+
+The live verification script confirmed that the deployed files match the final local build.
+
+## Run locally
 
 ```sh
 npm ci
@@ -38,11 +57,11 @@ npm test
 npx tsc --noEmit
 npm audit --audit-level=high
 npm run build
+QA_DIR="$PWD" node .factory/independent-qa.mjs
 npm run verify:live
 ```
 
-## Boundaries and next steps
+## Known gaps
 
-- This is a static local-first PWA; library/CLI packaging, backend concurrency/health, and sign-in/Entra checks do not apply. The production billing verification endpoint was rate-limit tested.
-- A real paid checkout was not completed. The catalog price and hosted checkout redirect passed.
-- Repair the two P2 issues, add regressions for 200% text reflow and negative-verdict caching, redeploy, and rerun independent verification.
+- No real checkout was completed; checkout redirect, catalog registration, license restore, valid/invalid cache behavior, and response-rate limits were verified without charging a card.
+- Lighthouse CLI could not complete in this container because the available Playwright Chromium closes during Lighthouse's BFCache cleanup (`Target closed`). The prior independent verification recorded live Lighthouse 13.4.1 scores of Performance 99, Accessibility 100, and Best Practices 100. The deployed repair only changes the mobile wrapping guard and licensing cache; current live identity, axe, performance budgets, and all browser checks pass.
