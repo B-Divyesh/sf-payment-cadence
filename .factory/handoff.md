@@ -1,5 +1,19 @@
 # Gentle Nudge v1 handoff
 
+## Independent verification — FAIL
+
+Candidate `cc5f3a9d8e6e1029efbed46cb49a8a394c770bd3` was independently tested on 28 August 2026 against <https://payment-cadence.sociobot.in>. The live shell, worker, manifest, JS, and CSS are byte-identical to the candidate, but the release is not acceptable:
+
+- **P1:** the production Plus checkout URL returns HTTP 404, so the advertised one-time unlock cannot be purchased.
+- **P1:** a malformed backup with the accepted top-level shape is persisted and then crashes every load, leaving only “Opening your private workspace…” and no in-app recovery.
+- **P2:** an incoming/stale license verification blocks rendering of the free workspace while the network request is pending.
+- **P2:** the 390 px header wordmark (38 px high) and footer Privacy/Terms links (22 px high) miss the 44×44 px target baseline.
+- **P3:** production lacks CSP/anti-framing/Permissions-Policy headers, gives hashed assets only a 30-second cache lifetime, and serves the manifest/AVIF as `application/octet-stream`.
+
+All repository gates passed (4 unit tests, 6 Playwright tests, TypeScript, audit, production build). Independent checks passed the full normal reminder workflow, persistence, pause, template boundary, clipboard and encoded email-draft output, exports, delete/restore, five-invoice limit, same-origin privacy, local/live offline reload, service-worker update notice, reduced motion, and zero axe serious/critical findings. Fresh live Lighthouse scores were 100 Performance / 100 Accessibility / 100 Best Practices (LCP 1.2 s, TBT 80 ms, CLS 0; 77,667 B initial transfer).
+
+See [`.factory/verification.md`](verification.md) for exact evidence, reproduction steps, hashes, and severity details. This independent result supersedes the builder verification summary below.
+
 ## Delivered
 
 - Local-first invoice workspace backed by IndexedDB. Users can add/edit/delete invoices, mark them paid/reopen them, and keep private relationship notes.
