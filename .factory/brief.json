@@ -1,0 +1,11 @@
+{
+  "slug": "payment-cadence",
+  "title": "Gentle Nudge",
+  "territory": "utilities",
+  "user": "Independent service providers who need to prepare consistent, escalating but human-approved payment reminders without delegating client relationships to an AI bot.",
+  "smallest_useful_product": "Local PWA with invoice dates, editable stage templates, a due-today queue, client-specific pause notes, and copy/email-draft output.",
+  "success_measure": "After 45 days, pilot users prepare a first reminder within two business days of due date for at least 80% of overdue invoices.",
+  "artifact_class": "pwa-offline",
+  "monetization": "one-time",
+  "constraints": "No automated email, profiling, or collection threats; templates should be editable and jurisdiction-neutral; local data export/delete is mandatory."
+}

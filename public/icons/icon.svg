@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Gentle Nudge envelope mark">
+  <rect width="512" height="512" rx="112" fill="#F5F0E6"/>
+  <circle cx="384" cy="130" r="60" fill="#A9CCE0"/>
+  <path d="M89 177c0-22 18-40 40-40h254c22 0 40 18 40 40v170c0 22-18 40-40 40H129c-22 0-40-18-40-40V177Z" fill="#C94F3D"/>
+  <path d="m108 171 148 121 148-121" fill="none" stroke="#172A3A" stroke-width="28" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="m108 355 101-89m195 89-101-89" fill="none" stroke="#172A3A" stroke-width="20" stroke-linecap="round"/>
+</svg>
