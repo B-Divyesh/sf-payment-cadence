@@ -23,3 +23,207 @@
     height: auto;
   }
 }
+
+/* Route, demo, landing, and enlarged-text safeguards. These stay separate so
+   they are easy to exercise at the 390px/200% accessibility breakpoint. */
+html,
+body {
+  max-width: 100%;
+  overflow-x: clip;
+}
+
+main,
+.masthead,
+footer,
+.welcome,
+.welcome-copy,
+.today-intro,
+.today-intro > div,
+.invoice-slip,
+.slip-main,
+.slip-actions,
+.workspace-title,
+.workspace-title > div,
+.legal-page,
+.legal-page h1,
+.legal-page p,
+.template-fields,
+.settings-grid,
+.dialog,
+.draft-layout,
+.draft-layout > * {
+  min-width: 0;
+}
+
+h1,
+h2,
+h3,
+p,
+li,
+small,
+.today-intro h2,
+.legal-page h1 {
+  overflow-wrap: anywhere;
+}
+
+/* A live region may be inserted after a top-layer dialog. Pin the visually
+   hidden element so its static position never widens the document. */
+.sr-only {
+  left: 0;
+  top: 0;
+}
+
+.page-head h1 {
+  position: static;
+  width: auto;
+  height: auto;
+  clip: auto;
+  overflow: visible;
+  margin: 0 0 26px;
+  font-size: clamp(2.2rem, 5vw, 4.2rem);
+}
+
+.nav-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  text-decoration: none;
+}
+
+.demo-banner {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  max-width: 1240px;
+  margin: 16px auto 0;
+  padding: 12px max(28px, env(safe-area-inset-left));
+  background: #dbeaf1;
+  border: 1px solid var(--ink);
+  color: var(--ink);
+}
+
+.demo-banner strong { font-family: Fraunces, Georgia, serif; }
+.demo-banner span { color: var(--muted); }
+.demo-banner .button { margin-left: auto; }
+.demo-banner a.button { margin-left: 0; }
+
+.legal-page a {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+}
+
+/* Keep the close control out of the scrollable form flow. On a short phone
+   viewport the former zero-height sticky wrapper could cover form controls. */
+.dialog {
+  padding-top: 62px;
+}
+
+.dialog-close {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  z-index: 3;
+  display: block;
+  height: auto;
+}
+
+.dialog-close button,
+.draft-dialog .dialog-close button {
+  position: static;
+  right: auto;
+  top: auto;
+}
+
+.draft-dialog .dialog-close { top: 18px; right: 18px; }
+
+.welcome h1 {
+  font-size: clamp(2.8rem, 6vw, 5.5rem);
+  margin-bottom: 24px;
+}
+
+.welcome h1 + p {
+  font-size: 1.15rem;
+  max-width: 46ch;
+  color: var(--muted);
+  margin-bottom: 28px;
+}
+
+.first-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.first-actions > span {
+  max-width: 25ch;
+  color: var(--muted);
+  font-size: .92rem;
+}
+
+.plain-facts {
+  display: grid;
+  gap: 6px;
+  padding: 0;
+  margin: 24px 0 0;
+  list-style: none;
+  color: var(--muted);
+  font-size: .9rem;
+}
+
+.plain-facts li::before {
+  content: '•';
+  color: var(--moss);
+  font-weight: 900;
+  margin-right: 8px;
+}
+
+.landing-section {
+  max-width: 960px;
+  margin: 0 auto;
+  padding: 64px 0;
+  border-top: 1px solid var(--line);
+}
+
+.landing-section > h2 { max-width: 22ch; }
+.landing-section > p { max-width: 65ch; color: var(--muted); font-size: 1.08rem; }
+.product-preview { content-visibility: auto; }
+.preview-slip {
+  display: grid;
+  gap: 6px;
+  max-width: 620px;
+  padding: 22px 26px;
+  background: var(--raised);
+  border: 1px solid var(--line);
+  clip-path: polygon(0 0, calc(100% - 18px) 0, 100% 18px, 100% 100%, 0 100%);
+}
+.preview-slip span { color: var(--muted); font-size: .9rem; }
+.preview-slip strong { font-family: Fraunces, Georgia, serif; font-size: 1.4rem; }
+.how-list { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 24px; padding: 0; list-style: none; counter-reset: how; }
+.how-list li { display: grid; gap: 8px; padding: 20px 0; border-top: 3px solid var(--coral); }
+.how-list strong::before { counter-increment: how; content: '0' counter(how) ' '; color: var(--coral-deep); font-family: ui-monospace, monospace; font-size: .78rem; }
+.how-list span { color: var(--muted); }
+.limits-section { max-width: 760px; }
+.not-found { max-width: 620px; padding: 80px 0; }
+.not-found p { color: var(--muted); max-width: 52ch; }
+
+@media (max-width: 640px) {
+  .page-head h1 { font-size: clamp(2rem, 10vw, 3.2rem); }
+  .today-intro { flex-wrap: wrap; gap: 20px; }
+  .today-intro h2 { max-width: 100%; font-size: clamp(2rem, 10vw, 2.65rem); }
+  .today-mark { margin-left: 0; }
+  .demo-banner { align-items: flex-start; flex-wrap: wrap; margin-top: 10px; padding: 12px 16px; }
+  .demo-banner span { flex-basis: 100%; }
+  .demo-banner .button { margin-left: 0; }
+  .welcome h1 { font-size: clamp(2.25rem, 12vw, 3.8rem); }
+  .welcome h1 + p { font-size: 1rem; }
+  .first-actions { align-items: flex-start; }
+  .first-actions > span { flex-basis: 100%; }
+  .landing-section { padding: 48px 0; }
+  .how-list { grid-template-columns: 1fr; gap: 8px; }
+  .legal-page { padding-inline: 16px; }
+  .legal-page h1 { font-size: clamp(2.1rem, 11vw, 3.2rem); }
+  .legal-page .lede { font-size: 1.05rem; }
+}

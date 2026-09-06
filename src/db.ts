@@ -5,10 +5,24 @@ import { parseWorkspaceBackup } from './backup';
 const DB_NAME = 'gentle-nudge';
 const DB_VERSION = 1;
 const STORE = 'workspace';
+let namespace = 'real';
+
+/**
+ * The sample workspace deliberately has a different IndexedDB database.  This
+ * is set before any storage call, so demo actions can never read or mutate a
+ * visitor's real workspace.
+ */
+export function setWorkspaceNamespace(next: 'real' | 'demo'): void {
+  namespace = next;
+}
+
+function databaseName() {
+  return namespace === 'demo' ? `demo:${DB_NAME}` : DB_NAME;
+}
 
 function openDb(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
-    const request = indexedDB.open(DB_NAME, DB_VERSION);
+    const request = indexedDB.open(databaseName(), DB_VERSION);
     request.onupgradeneeded = () => {
       if (!request.result.objectStoreNames.contains(STORE)) request.result.createObjectStore(STORE);
     };

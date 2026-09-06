@@ -1,7 +1,7 @@
 import './style.css';
 import './contrast.css';
 import './responsive.css';
-import { clearWorkspace, getRawWorkspace, loadWorkspace, saveWorkspace, setValue } from './db';
+import { clearWorkspace, getRawWorkspace, loadWorkspace, saveWorkspace, setValue, setWorkspaceNamespace } from './db';
 import { BackupValidationError, parseWorkspaceBackup } from './backup';
 import {
   defaultSettings, daysBetween, fillTemplate, formatDate, formatMoney, invoiceStatus,
@@ -20,63 +20,135 @@ let draft: Draft | null = null;
 let unlocked = false;
 let loadError = '';
 let licenseNotice = '';
+let demoMode = false;
+let routeMissing = false;
 const e = (value: unknown) => String(value ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!);
 
-function isLegalPage() { return location.pathname.startsWith('/privacy') || location.pathname.startsWith('/terms'); }
+const viewPaths: Record<View, string> = { today: '/', invoices: '/invoices', templates: '/cadence', settings: '/settings' };
+const headings: Record<View, string> = { today: 'Today’s payment reminders', invoices: 'Invoices', templates: 'Your reminder cadence', settings: 'Settings' };
+const descriptions: Record<View, string> = {
+  today: 'Prepare payment reminders on your device. Review every word before you send.',
+  invoices: 'Manage invoice dates and private payment reminder context on your device.',
+  templates: 'Edit the payment reminder steps you review before sending.',
+  settings: 'Manage local data, exports, and your Gentle Nudge license.'
+};
+
+function pathWithoutSlash(path = location.pathname) {
+  return path.replace(/\/+$/, '') || '/';
+}
+
+function isLegalPage() {
+  const path = pathWithoutSlash();
+  return path === '/privacy' || path === '/terms';
+}
+
+function routeState() {
+  const path = pathWithoutSlash();
+  const requestedDemo = path === '/demo' || path.startsWith('/demo/') || new URLSearchParams(location.search).get('demo') === '1';
+  const route = requestedDemo && path.startsWith('/demo/') ? path.slice(5) || '/' : requestedDemo ? '/' : path;
+  const matched = (Object.entries(viewPaths).find(([, value]) => value === route)?.[0] ?? 'today') as View;
+  const known = Object.values(viewPaths).includes(route);
+  return { requestedDemo, view: matched, known };
+}
+
+function workspacePath(target = view) {
+  const path = viewPaths[target];
+  if (!demoMode) return path;
+  return path === '/' ? '/demo' : `/demo${path}`;
+}
+
+function setMetadata(title: string, description: string, canonicalPath = location.pathname) {
+  document.title = title;
+  const descriptionNode = document.querySelector<HTMLMetaElement>('meta[name="description"]');
+  if (descriptionNode) descriptionNode.content = description;
+  const canonical = document.querySelector<HTMLLinkElement>('link[rel="canonical"]');
+  if (canonical) canonical.href = `${location.origin}${canonicalPath}`;
+}
+
+function sampleWorkspace(): { invoices: Invoice[]; settings: Settings } {
+  const today = new Date();
+  const date = (offset: number) => { const next = new Date(today); next.setDate(next.getDate() + offset); return localDate(next); };
+  const timestamp = new Date().toISOString();
+  return {
+    settings: {
+      senderName: 'Maya Chen', businessName: 'Maya Chen Studio', templates: structuredClone(defaultSettings.templates)
+    },
+    invoices: [
+      { id: 'demo-acorn', client: 'Acorn Architecture', email: 'accounts@acorn.example', number: 'AC-204', amount: 1850, currency: 'USD', dueDate: date(0), note: 'Their accounts contact asked for a copy of the signed scope.', pausedUntil: '', pauseNote: '', status: 'active', createdAt: timestamp, updatedAt: timestamp, history: [] },
+      { id: 'demo-haven', client: 'Haven Ceramics', email: 'billing@haven.example', number: 'HV-118', amount: 640, currency: 'USD', dueDate: date(-8), note: 'A long-term client. Keep the next note brief and warm.', pausedUntil: '', pauseNote: '', status: 'active', createdAt: timestamp, updatedAt: timestamp, history: [{ id: 'demo-haven-due', at: timestamp, stageId: 'due', stageName: 'A friendly check-in', kind: 'sent' }] },
+      { id: 'demo-juniper', client: 'Juniper Learning', email: 'payables@juniper.example', number: 'JL-077', amount: 1200, currency: 'USD', dueDate: date(4), note: 'New client. The invoice includes their purchase order.', pausedUntil: '', pauseNote: '', status: 'active', createdAt: timestamp, updatedAt: timestamp, history: [] }
+    ]
+  };
+}
 
 function legalPage(kind: 'privacy' | 'terms') {
   const privacy = kind === 'privacy';
-  document.title = `${privacy ? 'Privacy' : 'Terms'} — Gentle Nudge`;
+  setMetadata(`${privacy ? 'Privacy' : 'Terms'} — Gentle Nudge`, privacy ? 'How Gentle Nudge stores and handles payment reminder workspace data.' : 'Terms for using Gentle Nudge to prepare payment reminder drafts.', privacy ? '/privacy' : '/terms');
   app.innerHTML = `
-    <header class="legal-head"><a class="brand-link" href="/" aria-label="Gentle Nudge home"><span class="brand-mark" aria-hidden="true">✉</span> Gentle Nudge</a></header>
+    ${siteHeader()}
     <main id="main" class="legal-page">
-      <p class="eyebrow">Plain-language ${privacy ? 'privacy' : 'terms'}</p>
-      <h1>${privacy ? 'Your reminders stay yours.' : 'A workspace, not a collections service.'}</h1>
+      <p class="eyebrow">${privacy ? 'Privacy' : 'Terms'}</p>
+      <h1>${privacy ? 'Your payment reminders stay private' : 'Terms for preparing payment reminders'}</h1>
       ${privacy ? `
         <p class="lede">Gentle Nudge stores invoice details, client contact details, notes, templates, and reminder history in IndexedDB on this device. We do not receive or read that information.</p>
-        <h2>What leaves your device</h2><p>Nothing during normal use. If you buy or verify a license, the license token is sent to Sociobot’s billing API. Checkout is hosted by Sociobot/Dodo, the merchant of record. Opening an email draft passes the recipient, subject, and body to the email app you choose.</p>
-        <h2>Your control</h2><p>You can export your workspace as JSON or invoices as CSV at any time, import a backup, and permanently delete all local data from Settings. Removing browser storage also removes it.</p>
-        <h2>Offline and service worker</h2><p>The app shell is cached for offline use. No analytics, ad trackers, third-party scripts, or remote fonts run in this app.</p>
+        <h2>What leaves your device</h2><p>Nothing leaves during normal use. If you buy or verify a license, the license token goes to Sociobot’s billing API. Checkout is hosted by Sociobot/Dodo, the merchant of record. Opening an email draft passes its details to the email app you choose.</p>
+        <h2>Your control</h2><p>You can export a JSON backup or a CSV invoice list. You can import a backup and delete all local data from Settings. Removing browser storage also removes it.</p>
+        <h2>Offline use</h2><p>The app shell is cached after the first visit. No analytics, ad trackers, third-party scripts, or remote fonts run in this app.</p>
         <h2>Contact</h2><p>Privacy questions can be sent to <a href="mailto:privacy@sociobot.in">privacy@sociobot.in</a>.</p>` : `
         <p class="lede">Gentle Nudge helps you prepare payment reminder drafts. You decide what to write, when to follow up, and whether to send.</p>
         <h2>Your responsibility</h2><p>Review every draft for accuracy, tone, contract terms, and local law. Gentle Nudge does not send messages, collect debts, predict payment, or provide legal or financial advice.</p>
         <h2>Purchase</h2><p>Gentle Nudge Plus is a one-time US $18 purchase. Sociobot/Dodo is the merchant of record and handles checkout and refunds. A refund or chargeback revokes the associated license. The free tier remains available without purchase.</p>
-        <h2>Availability and data</h2><p>The software is provided “as is.” Your workspace is stored locally, so you are responsible for exporting backups. We may update the app while preserving the core human-review workflow.</p>
+        <h2>Availability and data</h2><p>The software is provided “as is.” Your workspace is stored locally, so you are responsible for exporting backups.</p>
         <h2>Contact</h2><p>Questions can be sent to <a href="mailto:support@sociobot.in">support@sociobot.in</a>.</p>`}
-      <p class="legal-updated">Effective 28 August 2026 · <a href="/">Return to the app</a></p>
-    </main>`;
+      <p class="legal-updated">Effective 6 September 2026 · <a href="/">Return to the app</a></p>
+    </main>${siteFooter()}`;
+}
+
+function siteHeader() {
+  const attention = invoices.filter((invoice) => needsAttention(invoice, settings.templates));
+  return `
+    <div id="offline-banner" class="offline-banner" role="status" ${navigator.onLine ? 'hidden' : ''}>Offline — your workspace still works on this device.</div>
+    <header class="masthead">
+      <a href="/" class="wordmark" aria-label="Gentle Nudge home"><span class="brand-mark" aria-hidden="true">✉</span><span><strong>Gentle Nudge</strong><small>Review before you send</small></span></a>
+      <nav aria-label="Workspace">
+        ${navLink('today', `Today${attention.length ? ` <span class="count">${attention.length}</span>` : ''}`)}
+        ${navLink('invoices', 'Invoices')}${navLink('templates', 'Cadence')}${navLink('settings', 'Settings')}
+      </nav>
+      <button class="button primary compact" data-action="add">Add invoice</button>
+    </header>`;
+}
+
+function siteFooter() {
+  return `<footer><p>Prepare payment reminders on your device.</p><div><a href="/privacy">Privacy</a><a href="/terms">Terms</a><span>Built by Param Factory · v1.1.0</span></div></footer>`;
 }
 
 function shell() {
-  const attention = invoices.filter((invoice) => needsAttention(invoice, settings.templates));
+  const title = routeMissing ? 'Page not found' : headings[view];
+  const isLanding = !routeMissing && !loadError && view === 'today' && invoices.length === 0;
+  setMetadata(routeMissing ? 'Page not found — Gentle Nudge' : `${view === 'today' ? 'Gentle Nudge — prepare payment reminders' : `${title} — Gentle Nudge`}`, routeMissing ? 'This Gentle Nudge page does not exist.' : descriptions[view], location.pathname);
   app.innerHTML = `
-    <div id="offline-banner" class="offline-banner" role="status" ${navigator.onLine ? 'hidden' : ''}>Offline — your workspace still works on this device.</div>
-    <header class="masthead">
-      <a href="/" class="wordmark" aria-label="Gentle Nudge, today"><span class="brand-mark" aria-hidden="true">✉</span><span><strong>Gentle Nudge</strong><small>Human-approved reminders</small></span></a>
-      <nav aria-label="Workspace">
-        ${navButton('today', `Today${attention.length ? ` <span class="count">${attention.length}</span>` : ''}`)}
-        ${navButton('invoices', 'Invoices')}${navButton('templates', 'Cadence')}${navButton('settings', 'Settings')}
-      </nav>
-      <button class="button primary compact" data-action="add">Add invoice</button>
-    </header>
+    ${siteHeader()}
+    ${demoMode ? `<aside class="demo-banner" role="status"><strong>Demo — sample data, nothing is saved</strong><span>Changes stay in the sample workspace.</span><button class="button secondary compact" data-action="reset-demo">Reset demo</button><a class="button primary compact" href="/">Start for real</a></aside>` : ''}
     <main id="main" tabindex="-1">
-      <div class="page-head"><p class="eyebrow">${view === 'today' ? formatDate(localDate()) : sectionEyebrow()}</p><h1>Gentle Nudge</h1></div>
+      ${isLanding ? '' : `<div class="page-head"><p class="eyebrow">${routeMissing ? 'Not found' : view === 'today' ? formatDate(localDate()) : sectionEyebrow()}</p><h1 tabindex="-1">${title}</h1></div>`}
       <div id="view">${renderView()}</div>
     </main>
-    <footer><p>Private by default. Stored on this device.</p><div><a href="/privacy/">Privacy</a><a href="/terms/">Terms</a><span>Original AI-assisted artwork</span></div></footer>
+    ${siteFooter()}
     <div id="toast" class="toast" role="status" aria-live="polite" aria-atomic="true"></div>
+    <p id="route-status" class="sr-only" aria-live="polite"></p>
     <div id="dialog-root"></div>`;
 }
 
-function navButton(target: View, label: string) {
-  return `<button class="nav-button" data-view="${target}" ${view === target ? 'aria-current="page"' : ''}>${label}</button>`;
+function navLink(target: View, label: string) {
+  return `<a class="nav-button" href="${workspacePath(target)}" ${view === target && !routeMissing ? 'aria-current="page"' : ''}>${label}</a>`;
 }
 
 function sectionEyebrow() {
-  return ({ invoices: 'Every open thread', templates: 'Your words, at your pace', settings: 'Local data & access', today: '' } as Record<View, string>)[view];
+  return ({ invoices: 'Invoice list', templates: 'Reminder cadence', settings: 'Local data and access', today: '' } as Record<View, string>)[view];
 }
 
 function renderView(): string {
+  if (routeMissing) return `<section class="not-found"><p class="eyebrow">404</p><h2>This page does not exist.</h2><p>Choose a workspace section or return to the payment reminder home page.</p><a class="button primary" href="/">Go to the home page</a></section>`;
   if (loadError) return `<section class="error-state" role="alert"><p class="eyebrow">Storage problem</p><h2>Your workspace could not open.</h2><p>${e(loadError)}</p><p>Download a recovery copy before resetting this device’s workspace. You may be able to repair and import that JSON later.</p><div class="button-cluster"><button class="button secondary" data-action="download-recovery">Download recovery copy</button><button class="button primary" data-action="reset-storage">Reset local workspace</button><button class="button text" data-action="reload">Try again</button></div></section>`;
   if (view === 'today') return renderToday();
   if (view === 'invoices') return renderInvoices();
@@ -85,20 +157,29 @@ function renderView(): string {
 }
 
 function renderToday(): string {
-  if (!invoices.length) return `
-    <section class="welcome">
-      <div class="welcome-copy"><p class="eyebrow">A calmer way to follow up</p><h2>Keep the relationship.<br><em>Lose the dread.</em></h2><p>Build a considerate cadence, see who needs attention, and review every word before it leaves your hands.</p><button class="button primary" data-action="add">Add your first invoice</button><p class="reassurance"><span aria-hidden="true">●</span> Nothing sends automatically</p></div>
-      <picture class="hero-art"><source type="image/avif" srcset="/assets/gentle-nudge-landscape-640.avif 640w, /assets/gentle-nudge-landscape-960.avif 960w" sizes="(max-width: 640px) 100vw, 55vw"><source type="image/webp" srcset="/assets/gentle-nudge-landscape-640.webp 640w, /assets/gentle-nudge-landscape-960.webp 960w" sizes="(max-width: 640px) 100vw, 55vw"><img src="/assets/gentle-nudge-landscape-960.jpg" srcset="/assets/gentle-nudge-landscape-640.jpg 640w, /assets/gentle-nudge-landscape-960.jpg 960w" sizes="(max-width: 640px) 100vw, 55vw" width="960" height="640" alt="A surreal paper landscape where an envelope rests on three coral stepping stones beneath a blue moon" decoding="async" fetchpriority="high"></picture>
-    </section>`;
+  if (!invoices.length) return landingPage();
   const active = invoices.filter((i) => i.status === 'active');
   const ready = active.filter((i) => needsAttention(i, settings.templates)).sort((a, b) => a.dueDate.localeCompare(b.dueDate));
   const paused = active.filter((i) => isPaused(i));
   const upcoming = active.filter((i) => daysBetween(i.dueDate) < 0).sort((a, b) => a.dueDate.localeCompare(b.dueDate));
   return `
-    <section class="today-intro"><div><h2>${ready.length ? `${ready.length} thoughtful follow-up${ready.length === 1 ? '' : 's'} to prepare` : 'You’re caught up.'}</h2><p>${ready.length ? 'These have reached their next cadence step. Review each one in your own voice.' : 'Nothing has reached its next step today. Your upcoming dates are below.'}</p></div><div class="today-mark" aria-hidden="true"><span>${ready.length}</span><small>ready</small></div></section>
+    <section class="today-intro"><div><h2>${ready.length ? `${ready.length} payment reminder${ready.length === 1 ? '' : 's'} to prepare` : 'You are caught up.'}</h2><p>${ready.length ? 'These invoices reached their next reminder step. Review each draft in your own voice.' : 'No invoice reached its next step today. Upcoming dates are below.'}</p></div><div class="today-mark" aria-hidden="true"><span>${ready.length}</span><small>ready</small></div></section>
     <div class="cadence-track" aria-hidden="true"><span></span><i></i><i></i><i></i></div>
-    <section aria-labelledby="ready-heading"><div class="section-title"><h2 id="ready-heading">Ready to prepare</h2><span>${ready.length}</span></div>${ready.length ? `<div class="invoice-list">${ready.map(invoiceCard).join('')}</div>` : `<div class="quiet-state"><span aria-hidden="true">✓</span><p>No drafts are waiting. That is a good kind of quiet.</p></div>`}</section>
-    ${(paused.length || upcoming.length) ? `<section class="later-section" aria-labelledby="later-heading"><div class="section-title"><h2 id="later-heading">Later on the path</h2><span>${paused.length + upcoming.length}</span></div><div class="mini-list">${[...paused, ...upcoming].slice(0, 5).map((i) => `<button data-action="edit" data-id="${i.id}"><span><strong>${e(i.client)}</strong><small>${e(i.number)}</small></span><span>${e(invoiceStatus(i, settings.templates))}</span></button>`).join('')}</div></section>` : ''}`;
+    <section aria-labelledby="ready-heading"><div class="section-title"><h2 id="ready-heading">Ready to prepare</h2><span>${ready.length}</span></div>${ready.length ? `<div class="invoice-list">${ready.map(invoiceCard).join('')}</div>` : `<div class="quiet-state"><span aria-hidden="true">✓</span><p>No drafts are waiting.</p></div>`}</section>
+    ${(paused.length || upcoming.length) ? `<section class="later-section" aria-labelledby="later-heading"><div class="section-title"><h2 id="later-heading">Later reminders</h2><span>${paused.length + upcoming.length}</span></div><div class="mini-list">${[...paused, ...upcoming].slice(0, 5).map((i) => `<button data-action="edit" data-id="${i.id}"><span><strong>${e(i.client)}</strong><small>${e(i.number)}</small></span><span>${e(invoiceStatus(i, settings.templates))}</span></button>`).join('')}</div></section>` : ''}`;
+}
+
+function landingPage() {
+  setMetadata('Gentle Nudge — prepare payment reminders', descriptions.today, '/');
+  return `
+    <section class="welcome" aria-labelledby="welcome-title">
+      <div class="welcome-copy"><p class="eyebrow">Payment reminder workspace</p><h1 id="welcome-title">Prepare payment reminders before you send</h1><p>For independent service providers who need respectful follow-up on late invoices.</p><div class="first-actions"><a class="button primary" href="/demo">Try it with sample data</a><span>See three realistic invoices and ready-to-review drafts.</span></div><button class="button secondary" data-action="add">Add your first invoice</button><ul class="plain-facts"><li>Private data stays on this device.</li><li>Works offline after the first visit.</li><li>Plus costs US $18 once. No subscription.</li></ul></div>
+      <picture class="hero-art"><source type="image/avif" srcset="/assets/gentle-nudge-landscape-640.avif 640w, /assets/gentle-nudge-landscape-960.avif 960w" sizes="(max-width: 640px) 100vw, 55vw"><source type="image/webp" srcset="/assets/gentle-nudge-landscape-640.webp 640w, /assets/gentle-nudge-landscape-960.webp 960w" sizes="(max-width: 640px) 100vw, 55vw"><img src="/assets/gentle-nudge-landscape-960.jpg" srcset="/assets/gentle-nudge-landscape-640.jpg 640w, /assets/gentle-nudge-landscape-960.jpg 960w" sizes="(max-width: 640px) 100vw, 55vw" width="960" height="640" alt="An envelope rests on three coral stepping stones beneath a blue moon" decoding="async" fetchpriority="high"></picture>
+    </section>
+    <section class="landing-section product-preview" aria-labelledby="preview-title"><p class="eyebrow">The workspace</p><h2 id="preview-title">See which reminder needs your review</h2><p>Each invoice shows its due date, private note, reminder step, and a draft you can edit.</p><div class="preview-slip"><span>Due today</span><strong>Acorn Architecture · AC-204</strong><span>Review draft before sending</span></div></section>
+    <section class="landing-section" aria-labelledby="how-title"><p class="eyebrow">How it works</p><h2 id="how-title">Prepare each reminder in three steps</h2><ol class="how-list"><li><strong>Add an invoice</strong><span>Save its due date and private context.</span></li><li><strong>Review the draft</strong><span>Edit the stage template in your own words.</span></li><li><strong>Choose how to send</strong><span>Copy the text or open your email app. Nothing sends automatically.</span></li></ol></section>
+    <section class="landing-section limits-section" aria-labelledby="limits-title"><p class="eyebrow">Privacy and limits</p><h2 id="limits-title">You keep control of every client relationship</h2><p>Gentle Nudge does not connect to banks or invoice providers. It does not profile clients, predict payment, or use collection threats.</p></section>
+    <section class="landing-section upgrade-strip" aria-labelledby="price-title"><div><p class="eyebrow">Gentle Nudge Plus</p><h2 id="price-title">Add more invoices and reminder steps</h2><p>Free includes five active invoices and three editable steps. Plus adds unlimited active invoices and up to five steps for US $18 once.</p></div><a class="button primary" href="https://api.sociobot.in/api/v1/products/payment-cadence/checkout">Buy Plus for US $18</a></section>`;
 }
 
 function invoiceCard(invoice: Invoice): string {
@@ -129,7 +210,7 @@ function renderTemplates(): string {
         <label>Subject<input name="subject" value="${e(stage.subject)}" required></label><label>Message<textarea name="body" rows="8" required>${e(stage.body)}</textarea></label>
         <div class="template-foot"><p>Use: <code>{{client}}</code> <code>{{invoice}}</code> <code>{{amount}}</code> <code>{{dueDate}}</code> <code>{{sender}}</code></p><button class="button secondary" type="submit">Save this step</button></div>
       </div></form>`).join('')}</div>
-    ${unlocked ? `<button class="button secondary" data-action="add-stage" ${settings.templates.length >= 5 ? 'disabled' : ''}>Add another step</button>` : `<aside class="upgrade-strip"><div><p class="eyebrow">Gentle Nudge Plus</p><h2>Need a longer cadence?</h2><p>Unlock up to five steps and unlimited active invoices with a one-time US $18 purchase.</p></div><a class="button primary" href="https://api.sociobot.in/api/v1/products/payment-cadence/checkout">Unlock Plus</a></aside>`}`;
+    ${unlocked ? `<button class="button secondary" data-action="add-stage" ${settings.templates.length >= 5 ? 'disabled' : ''}>Add another step</button>` : `<aside class="upgrade-strip"><div><p class="eyebrow">Gentle Nudge Plus</p><h2>Add more reminder steps</h2><p>Unlock up to five steps and unlimited active invoices with a one-time US $18 purchase.</p></div><a class="button primary" href="https://api.sociobot.in/api/v1/products/payment-cadence/checkout">Unlock Plus</a></aside>`}`;
 }
 
 function renderSettings(): string {
@@ -144,14 +225,14 @@ function renderSettings(): string {
 function invoiceDialog(invoice?: Invoice) {
   const editing = Boolean(invoice);
   const root = document.querySelector('#dialog-root')!;
-  root.innerHTML = `<dialog class="dialog"><form method="dialog" class="dialog-close"><button value="cancel" aria-label="Close dialog">×</button></form><form id="invoice-form" data-id="${invoice?.id ?? ''}"><p class="eyebrow">${editing ? 'Update context' : 'A new thread'}</p><h2>${editing ? 'Edit invoice' : 'Add an invoice'}</h2><p class="dialog-intro">Only the details needed to prepare a reminder. Everything stays on this device.</p><div class="form-grid"><label>Client name<input name="client" value="${e(invoice?.client)}" required autofocus></label><label>Client email<input name="email" type="email" value="${e(invoice?.email)}" required></label><label>Invoice number<input name="number" value="${e(invoice?.number)}" required></label><label>Amount<input name="amount" type="number" min="0.01" step="0.01" value="${invoice?.amount ?? ''}" required></label><label>Currency<select name="currency">${['USD','EUR','GBP','INR','CAD','AUD'].map((c) => `<option ${invoice?.currency === c ? 'selected' : ''}>${c}</option>`).join('')}</select></label><label>Due date<input name="dueDate" type="date" value="${invoice?.dueDate ?? localDate()}" required></label><label class="full">Relationship note <span>Optional</span><textarea name="note" rows="3">${e(invoice?.note)}</textarea><small>For your eyes only, e.g. “Accounts team changed this month.”</small></label></div><p class="form-error" role="alert"></p><div class="dialog-actions">${editing ? `<button class="danger-link" type="button" data-action="delete-invoice" data-id="${invoice!.id}">Delete invoice</button>` : '<span></span>'}<button class="button secondary" type="button" data-action="close-dialog">Cancel</button><button class="button primary" type="submit">${editing ? 'Save changes' : 'Add to cadence'}</button></div></form></dialog>`;
+  root.innerHTML = `<dialog class="dialog"><form method="dialog" class="dialog-close"><button value="cancel" aria-label="Close dialog">×</button></form><form id="invoice-form" data-id="${invoice?.id ?? ''}"><p class="eyebrow">${editing ? 'Invoice details' : 'New invoice'}</p><h2>${editing ? 'Edit invoice' : 'Add an invoice'}</h2><p class="dialog-intro">Only the details needed to prepare a reminder. Everything stays on this device.</p><div class="form-grid"><label>Client name<input name="client" value="${e(invoice?.client)}" required autofocus></label><label>Client email<input name="email" type="email" value="${e(invoice?.email)}" required></label><label>Invoice number<input name="number" value="${e(invoice?.number)}" required></label><label>Amount<input name="amount" type="number" min="0.01" step="0.01" value="${invoice?.amount ?? ''}" required></label><label>Currency<select name="currency">${['USD','EUR','GBP','INR','CAD','AUD'].map((c) => `<option ${invoice?.currency === c ? 'selected' : ''}>${c}</option>`).join('')}</select></label><label>Due date<input name="dueDate" type="date" value="${invoice?.dueDate ?? localDate()}" required></label><label class="full">Relationship note <span>Optional</span><textarea name="note" rows="3">${e(invoice?.note)}</textarea><small>For your eyes only, e.g. “Accounts team changed this month.”</small></label></div><p class="form-error" role="alert"></p><div class="dialog-actions">${editing ? `<button class="danger-link" type="button" data-action="delete-invoice" data-id="${invoice!.id}">Delete invoice</button>` : '<span></span>'}<button class="button secondary" type="button" data-action="close-dialog">Cancel</button><button class="button primary" type="submit">${editing ? 'Save changes' : 'Add to cadence'}</button></div></form></dialog>`;
   showDialog(root.querySelector('dialog')!);
 }
 
 function pauseDialog(invoice: Invoice) {
   const root = document.querySelector('#dialog-root')!;
   const tomorrow = new Date(); tomorrow.setDate(tomorrow.getDate() + 1);
-  root.innerHTML = `<dialog class="dialog small-dialog"><form method="dialog" class="dialog-close"><button value="cancel" aria-label="Close dialog">×</button></form><form id="pause-form" data-id="${invoice.id}"><p class="eyebrow">Make room for context</p><h2>Pause ${e(invoice.client)}</h2><label>Pause until<input name="pausedUntil" type="date" min="${localDate(tomorrow)}" value="${invoice.pausedUntil || localDate(tomorrow)}" required></label><label>Why are you pausing? <span>Optional</span><textarea name="pauseNote" rows="3">${e(invoice.pauseNote)}</textarea></label><p class="form-note">This note stays private. The invoice will leave Today until this date.</p><div class="dialog-actions"><span></span><button class="button secondary" type="button" data-action="close-dialog">Cancel</button><button class="button primary" type="submit">Pause reminders</button></div></form></dialog>`;
+  root.innerHTML = `<dialog class="dialog small-dialog"><form method="dialog" class="dialog-close"><button value="cancel" aria-label="Close dialog">×</button></form><form id="pause-form" data-id="${invoice.id}"><p class="eyebrow">Pause reminder</p><h2>Pause ${e(invoice.client)}</h2><label>Pause until<input name="pausedUntil" type="date" min="${localDate(tomorrow)}" value="${invoice.pausedUntil || localDate(tomorrow)}" required></label><label>Why are you pausing? <span>Optional</span><textarea name="pauseNote" rows="3">${e(invoice.pauseNote)}</textarea></label><p class="form-note">This note stays private. The invoice will leave Today until this date.</p><div class="dialog-actions"><span></span><button class="button secondary" type="button" data-action="close-dialog">Cancel</button><button class="button primary" type="submit">Pause reminders</button></div></form></dialog>`;
   showDialog(root.querySelector('dialog')!);
 }
 
@@ -179,16 +260,65 @@ function toast(message: string) {
 async function persistInvoices() { await setValue('invoices', invoices); }
 async function persistSettings() { await setValue('settings', settings); }
 
-function rerender(announcement?: string) { shell(); if (announcement) toast(announcement); }
+function announceRoute() {
+  const heading = document.querySelector<HTMLElement>('main h1');
+  heading?.focus();
+  const status = document.querySelector<HTMLElement>('#route-status');
+  if (status && heading) status.textContent = `${heading.textContent} loaded.`;
+}
+
+function renderLocation(announce = false) {
+  if (isLegalPage()) {
+    legalPage(pathWithoutSlash() === '/privacy' ? 'privacy' : 'terms');
+    if (announce) announceRoute();
+    return;
+  }
+  const state = routeState();
+  view = state.view;
+  routeMissing = !state.known;
+  shell();
+  if (announce) announceRoute();
+}
+
+function rerender(announcement?: string) { renderLocation(); if (announcement) toast(announcement); }
+
+function navigateTo(path: string) {
+  const destination = new URL(path, location.origin);
+  const nextDemo = destination.pathname === '/demo' || destination.pathname.startsWith('/demo/') || destination.searchParams.get('demo') === '1';
+  if (nextDemo !== demoMode) {
+    location.assign(`${destination.pathname}${destination.search}${destination.hash}`);
+    return;
+  }
+  history.pushState({}, '', `${destination.pathname}${destination.search}${destination.hash}`);
+  renderLocation(true);
+}
+
+window.addEventListener('popstate', () => {
+  const state = routeState();
+  if (state.requestedDemo !== demoMode) {
+    location.assign(`${location.pathname}${location.search}${location.hash}`);
+    return;
+  }
+  renderLocation(true);
+});
 
 document.addEventListener('click', async (event) => {
+  const anchor = (event.target as HTMLElement).closest<HTMLAnchorElement>('a[href]');
+  if (anchor && !anchor.hasAttribute('download')) {
+    const destination = new URL(anchor.href, location.origin);
+    if (destination.origin === location.origin && !isLegalPage()) {
+      event.preventDefault();
+      navigateTo(`${destination.pathname}${destination.search}${destination.hash}`);
+      return;
+    }
+  }
   const button = (event.target as HTMLElement).closest<HTMLElement>('[data-action], [data-view]');
   if (!button) return;
-  if (button.dataset.view) { view = button.dataset.view as View; shell(); document.querySelector<HTMLElement>('#main')?.focus(); return; }
+  if (button.dataset.view) { navigateTo(workspacePath(button.dataset.view as View)); return; }
   const action = button.dataset.action;
   const invoice = invoices.find((item) => item.id === button.dataset.id);
   if (action === 'add') {
-    if (!unlocked && invoices.filter((i) => i.status === 'active').length >= 5) { view = 'settings'; rerender('Free supports five active invoices. Unlock Plus or mark one paid.'); return; }
+    if (!unlocked && invoices.filter((i) => i.status === 'active').length >= 5) { navigateTo(workspacePath('settings')); toast('Free supports five active invoices. Unlock Plus or mark one paid.'); return; }
     invoiceDialog();
   }
   if (action === 'edit' && invoice) invoiceDialog(invoice);
@@ -205,6 +335,7 @@ document.addEventListener('click', async (event) => {
   if (action === 'export-json') download('gentle-nudge-backup.json', JSON.stringify({ version: 1, exportedAt: new Date().toISOString(), invoices, settings }, null, 2), 'application/json');
   if (action === 'export-csv') exportCsv();
   if (action === 'delete-all' && confirm('Delete every invoice, note, template change, and reminder history from this device? This cannot be undone.')) { await clearWorkspace(); invoices = []; settings = structuredClone(defaultSettings); rerender('All local workspace data was deleted.'); }
+  if (action === 'reset-demo' && demoMode) { await clearWorkspace(); const sample = sampleWorkspace(); await saveWorkspace(sample); invoices = sample.invoices; settings = sample.settings; view = 'today'; routeMissing = false; rerender('Sample data was reset.'); }
   if (action === 'download-recovery') { const raw = await getRawWorkspace(); download('gentle-nudge-recovery.json', JSON.stringify({ version: 1, recoveredAt: new Date().toISOString(), ...raw }, null, 2), 'application/json'); }
   if (action === 'reset-storage' && confirm('Reset this damaged local workspace? Download a recovery copy first if you may need these records.')) { await clearWorkspace(); invoices = []; settings = structuredClone(defaultSettings); loadError = ''; rerender('The local workspace was reset and is ready to use.'); }
 });
@@ -329,8 +460,17 @@ async function registerWorker() {
 }
 
 async function init() {
-  if (isLegalPage()) { legalPage(location.pathname.startsWith('/privacy') ? 'privacy' : 'terms'); return; }
+  if (isLegalPage()) { legalPage(pathWithoutSlash() === '/privacy' ? 'privacy' : 'terms'); return; }
+  const initialRoute = routeState();
+  demoMode = initialRoute.requestedDemo;
+  view = initialRoute.view;
+  routeMissing = !initialRoute.known;
+  setWorkspaceNamespace(demoMode ? 'demo' : 'real');
   try { ({ invoices, settings } = await loadWorkspace()); } catch (error) { loadError = error instanceof BackupValidationError ? 'Some saved records are incomplete or damaged.' : error instanceof Error ? error.message : 'Local storage is unavailable. Check your browser privacy settings.'; }
+  if (demoMode && !loadError && invoices.length === 0) {
+    const sample = sampleWorkspace();
+    await saveWorkspace(sample); invoices = sample.invoices; settings = sample.settings;
+  }
   const license = initLicense(); shell(); void registerWorker();
   if (license) void verifyLicense(license.token);
 }

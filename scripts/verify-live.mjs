@@ -21,6 +21,8 @@ for (const path of ['/index.html', '/sw.js', '/manifest.webmanifest', ...assetPa
 }
 
 const rootResponse = await fetch(base);
+const rootHtml = await rootResponse.clone().text();
+record('canonical and social metadata', rootHtml.includes('rel="canonical"') && rootHtml.includes('property="og:title"') && rootHtml.includes('name="twitter:card"') && rootHtml.includes('apple-touch-icon'), 'canonical, Open Graph, Twitter, and apple-touch metadata');
 record('CSP and anti-framing policy', rootResponse.headers.get('content-security-policy')?.includes("frame-ancestors 'none'") && rootResponse.headers.get('x-frame-options') === 'DENY', rootResponse.headers.get('content-security-policy') || 'missing CSP');
 record('permissions policy', rootResponse.headers.get('permissions-policy')?.includes('camera=()'), rootResponse.headers.get('permissions-policy') || 'missing');
 const assetResponse = await fetch(`${base}${assetPaths[0]}`);
@@ -29,6 +31,11 @@ const manifestResponse = await fetch(`${base}/manifest.webmanifest`);
 const avifResponse = await fetch(`${base}/assets/gentle-nudge-landscape-960.avif`);
 record('manifest MIME', manifestResponse.headers.get('content-type')?.startsWith('application/manifest+json'), manifestResponse.headers.get('content-type') || 'missing');
 record('AVIF MIME', avifResponse.headers.get('content-type')?.startsWith('image/avif'), avifResponse.headers.get('content-type') || 'missing');
+const robotsResponse = await fetch(`${base}/robots.txt`);
+const sitemapResponse = await fetch(`${base}/sitemap.xml`);
+record('robots and sitemap discovery files', robotsResponse.ok && (await robotsResponse.text()).includes('Sitemap:') && sitemapResponse.ok && (await sitemapResponse.text()).includes('<urlset'), `${robotsResponse.status}/${sitemapResponse.status}`);
+const notFoundResponse = await fetch(`${base}/not-a-page`);
+record('designed HTTP 404', notFoundResponse.status === 404 && (await notFoundResponse.text()).includes('This page does not exist.'), `${notFoundResponse.status}`);
 
 const catalogResponse = await fetch('https://api.sociobot.in/api/v1/products');
 const catalog = await catalogResponse.json();
@@ -69,7 +76,7 @@ for (const viewport of [{ name: 'desktop', width: 1440, height: 900 }, { name: '
   await page.waitForFunction(() => navigator.serviceWorker?.controller, null, { timeout: 10_000 });
   await context.setOffline(true);
   await page.reload();
-  record(`${viewport.name} offline reload`, await page.getByRole('heading', { level: 1, name: 'Gentle Nudge' }).isVisible() && await page.getByText(/Offline — your workspace still works/).isVisible());
+  record(`${viewport.name} offline reload`, await page.getByRole('heading', { level: 1 }).isVisible() && await page.getByText(/Offline — your workspace still works/).isVisible());
   await context.close();
 }
 await browser.close();

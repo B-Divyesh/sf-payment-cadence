@@ -1,8 +1,8 @@
 {
   "name": "Gentle Nudge — payment reminder workspace",
   "short_name": "Gentle Nudge",
-  "description": "Prepare, review, and send considerate payment reminders without automation.",
-  "start_url": "/?v=1",
+  "description": "Prepare and review payment reminders before you send them.",
+  "start_url": "/?v=2",
   "scope": "/",
   "display": "standalone",
   "background_color": "#f5f0e6",

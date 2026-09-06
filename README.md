@@ -1,52 +1,59 @@
 # Gentle Nudge
 
-Gentle Nudge is a private, local-first workspace for independent service providers who want consistent payment follow-up without handing their client relationship to an automated collections bot.
+Gentle Nudge helps independent service providers prepare payment reminders before they send them.
 
-Add invoice dates and relationship context, shape an editable three-step cadence, review each reminder, then copy it or open it as an email draft. Nothing sends automatically. Invoices, templates, notes, and reminder history live in IndexedDB on the device and can be exported or deleted at any time.
+Try the product at <https://payment-cadence.sociobot.in/demo>. The sample opens three realistic invoices in an isolated workspace. It never reads or changes your real workspace.
 
-Live: <https://payment-cadence.sociobot.in>
+## What it does
 
-## What v1 includes
+- Shows due and overdue invoices with stage-specific drafts to review.
+- Lets you edit reminder templates and private client context.
+- Keeps reminder history, paid status, and pause notes on the device.
+- Copies a reviewed draft or opens an email draft. Nothing sends automatically.
+- Exports JSON backups and CSV invoice lists. You can delete all local data.
+- Works offline after the first visit.
+- Keeps normal workspace activity on the product origin. It loads no analytics, trackers, remote fonts, or third-party scripts.
+- Does not connect to banks or invoice providers. It does not profile clients, predict payment, or use collection threats.
 
-- Due-today and overdue queue with stage-specific drafts
-- Editable, jurisdiction-neutral templates and per-invoice context notes
-- Pause-until dates, paid/reopen state, and reminder history
-- Copy and `mailto:` draft output with an explicit “I sent it” confirmation
-- JSON backup/import, CSV export, and full local deletion
-- Installable offline PWA with responsive desktop and 390px layouts
-- Free workspace for five active invoices; one-time US $18 Plus license for unlimited active invoices and up to five cadence steps
-- Plain-language `/privacy/` and `/terms/` pages
+Free includes five active invoices and three editable reminder steps. Gentle Nudge Plus is US $18 once with no subscription. Plus supports unlimited active invoices and up to five reminder steps.
 
 ## Run locally
 
 Requires Node.js 22+.
 
 ```sh
-npm install
+npm ci
 npm run dev
 ```
 
-Open the local URL printed by Vite. No environment variables or external services are required for the free app. License verification uses the Sociobot billing API only when a license is present.
+Open the local URL printed by Vite. The free workspace has no environment variables. License verification contacts the Sociobot billing API only after a license is supplied.
 
 ## Test and build
 
 ```sh
-npm test        # unit + Chromium desktop/390px + offline + axe checks
+npm ci
+npm test
 npx tsc --noEmit
-npm run build   # reproducible static output in dist/
-npm run preview # preview dist/ locally
-npm run verify:live # deployed identity, headers, checkout, browser, axe, and offline checks
+npm audit --audit-level=high
+npm run build
+npm run verify:live
 ```
 
-Playwright is pinned to `1.58.2`. The factory image already provides its Chromium browser; elsewhere run `npx playwright install chromium` once if needed.
+Every public product claim is listed in [`.factory/claims.json`](.factory/claims.json). Run an individual claim from a clean checkout with its documented command, for example:
 
-Static deployment must publish `dist/` with history/direct-path fallback enabled for convenience; independent `privacy/index.html` and `terms/index.html` files are included. The generated service worker precaches the built, hashed shell. `public/staticwebapp.config.json` carries the production security, MIME, and cache policy for Azure Static Web Apps.
+```sh
+npm run test:claims -- --grep @claim:demo-sandbox
+```
 
-## Privacy and limits
+Playwright is pinned to `1.58.2`. Run `npx playwright install chromium` on a machine that does not already have its browser.
 
-There is no analytics, tracking, bank access, invoice-provider connection, client profiling, or automatic email. The only network request initiated by app logic is license verification after a user supplies or purchases a license. Users should review reminder wording for their agreements and jurisdiction.
+## Deploy
 
-See [the product brief](.factory/brief.json), [the visual system and asset provenance](.factory/design.md), and [the factory handoff](.factory/handoff.md).
+Publish `dist/` to the static host. `public/staticwebapp.config.json` supplies the history fallback, designed 404 rewrite, security headers, and cache policy. The generated service worker precaches the built shell.
+
+## Privacy and product limits
+
+The demo uses `demo:gentle-nudge` IndexedDB. Real data uses `gentle-nudge` IndexedDB. See [the demo sandbox](.factory/demo.md), [privacy](/privacy), [terms](/terms), [the visual system and asset provenance](.factory/design.md), and [the factory handoff](.factory/handoff.md).
 
 ## License
 
