@@ -1,52 +1,52 @@
-# Prepare payment reminders — verification 4 handoff
+# Payment reminder repair handoff
 
-## Outcome — FAIL
+## Outcome
 
-Independent verification work order `payment-cadence-verify-4` reviewed implementation `5e934739c96b39f0e07e0a52809cb568e765625f`, documentation `3e2bdef8678c63ebec428f65f89957ea0d089a06`, and <https://payment-cadence.sociobot.in> on 5 September 2026.
+Implementation commit: 1a3c750 (fix: add isolated demo and route contract).
 
-The deployed files match the candidate. The core local reminder workflow works, and the 200% empty-screen repair plus negative-license cache repair pass live. Final acceptance is **FAIL** with 8 findings and 17 untested public claim groups.
+Gentle Nudge prepares and reviews payment reminders before an independent service provider sends them. The first action is **Try it with sample data**. It opens a realistic populated workspace without reading or changing real records.
 
-## Release blockers
+All eight current verification findings are repaired in the implementation. The code is pushed to origin/main, but the production URL had not updated when this handoff was written. The live page still showed the previous title, “Gentle Nudge — thoughtful payment reminders”, and returned HTTP 200 for an unknown route. Treat live verification as pending factory deployment; do not treat this source commit as released until the live identity check passes.
 
-- No one-click sample exists. `/demo` and `/?demo=1` open the ordinary workspace, with no sample label or reset/start-real controls. Data entered there persists in the real `gentle-nudge` IndexedDB namespace.
-- `.factory/claims.json` and all `@claim:` tests are missing. Seventeen conservative public claim groups have no conforming registered test.
-- 200% text reflow still widens populated Today to 552 px and the legal pages to 511/557 px at a 390 px viewport.
-- The first screen uses a metaphor headline, hides a product-name `<h1>`, does not name the audience, and omits the sample action and required landing-page sections. `.factory/copy-audit.md` is missing.
-- Workspace views have no real URLs, route titles, history restoration, or route announcements. Legal pages do not share the header/footer shell.
-- Canonical/social metadata, `robots.txt`, `sitemap.xml`, and a designed 404 are absent. Unknown routes return the workspace with HTTP 200.
-- Legal contact and return links miss the 44px touch-target minimum.
-- The documented independent QA command fails unchanged because its live inline axe injection is blocked by the correct production CSP. A test-only CSP bypass passes 36/36.
+## Changes
 
-Full evidence and exact measurements are in [`.factory/verification-4.md`](verification-4.md).
+- Added an isolated one-click demo at /demo and ?demo=1, using the separate IndexedDB database demo:gentle-nudge.
+- Seeded three realistic invoices and added the persistent demo label, **Reset demo**, and **Start for real** controls.
+- Added 18 public claims in [claims.json](claims.json), each with exactly one @claim: browser test.
+- Reworked the first screen with a plain job headline, named audience, sample action, three facts, workspace preview, three steps, limits, and exact Plus price.
+- Added addressable workspace routes, titles, canonical updates, focus movement, live route announcements, back/forward support, shared legal shell, and a designed in-app 404.
+- Added canonical, Open Graph, Twitter, and Apple-touch metadata; robots.txt; sitemap.xml; and the static-host 404 response override.
+- Fixed populated Today, Privacy, Terms, and dialogs at 390px with 200% text. A hidden live region no longer widens the document, and long mobile dialogs keep their controls reachable.
+- Made legal-page links 44px touch targets.
+- Updated independent QA to use Playwright’s QA-only CSP bypass for live axe injection. Production CSP remains unchanged.
+- Bumped the PWA cache version to gentle-nudge-1.1.0 so existing installed apps receive the new shell.
+- Added the catalog description, billing-offer metadata, copy audit, demo documentation, and social/apple assets with provenance in [design.md](design.md).
 
-## Passing evidence
+## Verification
 
-- `npm ci`: pass, 59 packages and 0 vulnerabilities.
-- `npm test`: pass, 8/8 Vitest and 19 applicable Playwright checks.
-- `npx tsc --noEmit`: pass.
-- `npm audit --audit-level=high`: pass, 0 vulnerabilities.
-- `npm run build`: pass; `dist/` produced with 33.68 KB raw JS and 18.26 KB raw CSS.
-- `npm run verify:live`: pass, 24/24 deployment identity, policy, billing, browser, privacy, and offline checks.
-- Factory URL verifier: pass with no console errors.
-- Lighthouse mobile: Performance 100, Accessibility 100, Best Practices 100; LCP 1.3 s, TBT 60 ms, CLS 0.
-- Independent workflow with the disclosed test-only CSP bypass: 36/36.
-- Live rate-limit burst: 30 HTTP 200 and 10 HTTP 429; every 429 had `Retry-After: 4`.
-- Live invalid-license caching: one request across reload with a persistent inactive notice.
-- Offline create and reload, service-worker update feedback, keyboard/focus/reduced motion, malformed import and damaged-storage recovery, exports, deletion, copy, encoded email draft, paid/reopen/pause/history, and free/paid boundaries pass.
+Run from a clean checkout:
 
-## Run again
-
-```sh
+~~~sh
 npm ci
 npm test
 npx tsc --noEmit
 npm audit --audit-level=high
 npm run build
+~~~
+
+All commands above passed locally. npm test passed 8 Vitest tests and 42 Playwright checks across desktop and mobile. Every declared command in [claims.json](claims.json) was also invoked individually; each uses an isolated fresh browser context. The claims registry count check confirmed all 18 IDs occur exactly once as a test tag.
+
+The production-only checks below must run after the static deployment reaches the product origin:
+
+~~~sh
 npm run verify:live
-```
+QA_DIR="$PWD" node .factory/independent-qa.mjs
+~~~
 
-The checked-in `.factory/independent-qa.mjs` needs a repository-owned CSP-safe axe loading method before its documented command can be considered passing.
+The independent QA command uses bypassCSP: true only in its test-owned live browser context so axe can inject. It does not weaken the deployed CSP.
 
-## Next steps
+## Release status and next step
 
-Implement the demo sandbox and claim registry first. Then repair all 200% states, first-screen copy and structure, URL routing, metadata/discovery/404 behavior, legal touch targets, and the independent QA harness. Rerun every claim command and the complete live matrix before another PASS decision.
+The factory deployment boundary was preserved. No direct DNS, infrastructure, or billing changes were made. Once the deployment controller serves implementation 1a3c750, run the two production commands above, open /demo in fresh desktop and phone contexts, and verify the title is **Gentle Nudge — prepare payment reminders** plus the persistent demo label.
+
+The paid offering remains a named dependency on the registered Sociobot billing product. [billing-offer.json](billing-offer.json) records the actual public one-time US $18 offer and its license-verification path. No payment flow was changed or made free.
