@@ -1,52 +1,61 @@
-# Payment reminder repair handoff
+# Verification 5 handoff
 
 ## Outcome
 
-Implementation commit: 1a3c750 (fix: add isolated demo and route contract).
+**FAIL — 5 findings and 6 untested or incompletely tested public claim groups.**
 
-Gentle Nudge prepares and reviews payment reminders before an independent service provider sends them. The first action is **Try it with sample data**. It opens a realistic populated workspace without reading or changing real records.
+Implementation candidate: `1a3c7505cfa8be12954870502d033d2dbf84a685`.
 
-All eight current verification findings are repaired in the implementation. The code is pushed to origin/main, but the production URL had not updated when this handoff was written. The live page still showed the previous title, “Gentle Nudge — thoughtful payment reminders”, and returned HTTP 200 for an unknown route. Treat live verification as pending factory deployment; do not treat this source commit as released until the live identity check passes.
+Documentation/QA commit reviewed: `daed0dc7ce3c0d7223cfdf23f8dd95e5468d1d66` (following handoff commit `23d9994`).
 
-## Changes
+The current production bundle is deployed. All 24 public files from a clean build match <https://payment-cadence.sociobot.in> byte for byte. No product code was changed during verification.
 
-- Added an isolated one-click demo at /demo and ?demo=1, using the separate IndexedDB database demo:gentle-nudge.
-- Seeded three realistic invoices and added the persistent demo label, **Reset demo**, and **Start for real** controls.
-- Added 18 public claims in [claims.json](claims.json), each with exactly one @claim: browser test.
-- Reworked the first screen with a plain job headline, named audience, sample action, three facts, workspace preview, three steps, limits, and exact Plus price.
-- Added addressable workspace routes, titles, canonical updates, focus movement, live route announcements, back/forward support, shared legal shell, and a designed in-app 404.
-- Added canonical, Open Graph, Twitter, and Apple-touch metadata; robots.txt; sitemap.xml; and the static-host 404 response override.
-- Fixed populated Today, Privacy, Terms, and dialogs at 390px with 200% text. A hidden live region no longer widens the document, and long mobile dialogs keep their controls reachable.
-- Made legal-page links 44px touch targets.
-- Updated independent QA to use Playwright’s QA-only CSP bypass for live axe injection. Production CSP remains unchanged.
-- Bumped the PWA cache version to gentle-nudge-1.1.0 so existing installed apps receive the new shell.
-- Added the catalog description, billing-offer metadata, copy audit, demo documentation, and social/apple assets with provenance in [design.md](design.md).
+## Remaining findings
 
-## Verification
+1. Unknown live URLs render the in-app not-found design but return HTTP 200 instead of HTTP 404.
+2. The keyboard skip link receives visible focus, but Enter leaves focus on the link instead of moving it to `<main>`.
+3. `/demo` retains the root title instead of using **Demo — Gentle Nudge**.
+4. Six public claim components are absent from the registry or incompletely asserted: exact three-invoice sample, free three-step count, email-draft activation/output, persisted history/pause note/paid state, complete local-data deletion, and unlimited active invoices.
+5. At 1440×900 the job headline breaks **reminders** between `r` and `s` because headings use `overflow-wrap: anywhere`.
 
-Run from a clean checkout:
+See [verification-5.md](verification-5.md) for reproduction detail and evidence references.
 
-~~~sh
+## Verification performed
+
+From a detached clean worktree at `daed0dc`:
+
+```sh
 npm ci
 npm test
 npx tsc --noEmit
 npm audit --audit-level=high
 npm run build
-~~~
+```
 
-All commands above passed locally. npm test passed 8 Vitest tests and 42 Playwright checks across desktop and mobile. Every declared command in [claims.json](claims.json) was also invoked individually; each uses an isolated fresh browser context. The claims registry count check confirmed all 18 IDs occur exactly once as a test tag.
+The build gates pass: 8 unit tests, 41 browser checks plus one intended desktop skip, TypeScript, audit, and production build.
 
-The production-only checks below must run after the static deployment reaches the product origin:
+Every command in `.factory/claims.json` was run separately. All 18 exit successfully, but six claim components fail the required one-to-one completeness review.
 
-~~~sh
-npm run verify:live
-QA_DIR="$PWD" node .factory/independent-qa.mjs
-~~~
+Additional results:
 
-The independent QA command uses bypassCSP: true only in its test-owned live browser context so axe can inject. It does not weaken the deployed CSP.
+- `QA_DIR="$PWD" node .factory/independent-qa.mjs`: 22/22 pass.
+- Broad workflow regression: 35/36 pass; skip target fails.
+- `npm run verify:live`: 25/27 pass; skip target and HTTP 404 fail.
+- Full public artifact identity: 24/24 match.
+- Lighthouse mobile: Performance 100, Accessibility 100, Best Practices 100; LCP 1.2 s, CLS 0.
+- Billing burst: 30 HTTP 200 and 10 HTTP 429; every 429 has `Retry-After`.
 
-## Release status and next step
+The live sample, reset, separate demo namespace, realistic draft, copy output, real-data isolation, 200% phone reflow, touch targets, offline reload, service-worker update notice, invalid input, numeric boundaries, export/import/delete, and malformed-backup recovery pass.
 
-The factory deployment boundary was preserved. No direct DNS, infrastructure, or billing changes were made. Once the deployment controller serves implementation 1a3c750, run the two production commands above, open /demo in fresh desktop and phone contexts, and verify the title is **Gentle Nudge — prepare payment reminders** plus the persistent demo label.
+## Next steps
 
-The paid offering remains a named dependency on the registered Sociobot billing product. [billing-offer.json](billing-offer.json) records the actual public one-time US $18 offer and its license-verification path. No payment flow was changed or made free.
+- Correct the host 404 behavior and verify an unknown path returns the designed page with status 404.
+- Exempt fragment-only skip links from SPA routing and move focus to the main landmark.
+- Set the demo route title explicitly.
+- Add or narrow claim text/tests so each public assertion has one complete tagged test.
+- Replace global desktop `overflow-wrap: anywhere` on the hero heading with a reflow rule that does not split normal words.
+- Rerun all 18 claim commands, the broad regression, `npm run verify:live`, live phone/desktop screenshots, and the evidence export.
+
+## Evidence
+
+The repository report is `.factory/verification-5.md`. The copied report and machine result are `/work/.evidence/qa-report.md` and `/work/.evidence/qa-result.json`. Supporting artifacts are in `/work/.evidence/payment-cadence-verify-5/`.
