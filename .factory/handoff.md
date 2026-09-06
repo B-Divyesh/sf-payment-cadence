@@ -1,10 +1,10 @@
-# Verification 6 handoff
+# Review 1 handoff
 
 ## Outcome
 
-**PASS.** Independent Verification 6 found zero product findings and zero untested public claims at <https://payment-cadence.sociobot.in>.
+**FAIL.** Review 1 found one mobile first-screen layout finding and zero untested public claims at <https://payment-cadence.sociobot.in>.
 
-Production implementation SHA: `aaa6ec8a86b3ffeff6f942d045b090d23d1a92a9` (including implementation commit `b3df5ff`). Documentation/verification SHA: `7ee02524deeb1c0eecff05341d09f7a847cca394` before this report commit. The deployed product image is the implementation SHA.
+Production implementation SHA: `aaa6ec8a86b3ffeff6f942d045b090d23d1a92a9` (including implementation commit `b3df5ff`). Documentation/verification SHA: `7b87876e6044a9c5d64458c6d33115be214d776a` before this review report commit. The deployed product image is the implementation SHA.
 
 ## What is shipped
 
@@ -28,21 +28,21 @@ npm run verify:live
 QA_DIR="$PWD" node .factory/independent-qa.mjs
 ```
 
-Verification 6 results:
+Review 1 results:
 
-- `npm test`: 8 Vitest checks and 44 Playwright checks passed; 2 intentional project-specific checks skipped.
+- `npm test`: 8 Vitest checks and 44 Playwright checks passed; 2 intended project-specific checks skipped.
 - All 18 declared claim commands passed separately. There are 18 unique claim IDs and 18 unique source tags.
 - TypeScript, high-severity audit, and production build passed; `dist/` exists.
 - `npm run verify:live`: 30/30 passed, including designed HTTP 404, skip focus, distinct demo title, intact desktop headline, offline reload, metadata, billing offer, and deployed-asset identity.
 - `QA_DIR="$PWD" node .factory/independent-qa.mjs`: 22/22 passed with no console, page, or failed-request errors.
-- Playwright Axe found zero serious or critical violations. Fresh 1440×900 and 390×844 live browsers showed the job, audience, and sample action before scrolling; both loaded the persistent three-invoice demo.
-- Fresh Lighthouse mobile: Performance 96, Accessibility 100, Best Practices 100; FCP 1.0 s, LCP 1.4 s, TBT 240 ms, CLS 0, and 81 KiB transferred.
+- Playwright Axe found zero serious or critical violations. Fresh desktop and phone browsers showed the job and audience, and both loaded the persistent three-invoice demo; the phone sample action clipping is the finding recorded below.
+- Fresh Lighthouse mobile: Performance 100, Accessibility 100, Best Practices 100; FCP 0.9 s, LCP 1.2 s, TBT 0 ms, CLS 0, and 81 KiB transferred.
 - Build sizes: JavaScript 40,596 bytes raw / 13.37 kB gzip; CSS 21,921 bytes raw / 5.69 kB gzip; font 18,096 bytes; mobile AVIF 8,789 bytes.
 
-Detailed verification is in `.factory/verification-6.md`; screenshots and machine evidence are in `/work/.evidence/payment-cadence-verify-6/`.
+Detailed review evidence is in `.factory/review-1.md` and `/tmp/payment-cadence-review-1-evidence/`.
 
-## Billing and known gaps
+## Billing and known gap
 
-The production catalog lists Gentle Nudge Plus at US $18 once. Checkout returns the hosted Sociobot/Dodo redirect, and a 40-request verification burst produced 30 HTTP 200 / 10 HTTP 429 responses with `Retry-After` on every 429. No purchase or charge was made.
+The production catalog lists Gentle Nudge Plus at US $18 once. Checkout returns the hosted Sociobot/Dodo redirect, and a fresh 40-request verification burst produced 30 HTTP 200 / 10 HTTP 429 responses with `Retry-After` on every 429. No purchase or charge was made.
 
-No product defect is known. The only intentionally unperformed action is a real paid transaction; hosted checkout, public catalog metadata, controlled valid-license behavior, and the live rate-limit boundary were verified without charging a card.
+At a fresh 390×844 phone viewport, the landing-page **Try it with sample data** action is only 30.61 px visible out of its 46 px height before scrolling (top 813.39 px; bottom 859.39 px). The next repair should move or compact the phone first screen so the complete action and its 44 px target are visible with the job and audience. The only intentionally unperformed action remains a real paid transaction; hosted checkout, public catalog metadata, controlled valid-license behavior, and the live rate-limit boundary were verified without charging a card.
