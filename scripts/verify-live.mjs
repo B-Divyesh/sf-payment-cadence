@@ -34,6 +34,8 @@ record('AVIF MIME', avifResponse.headers.get('content-type')?.startsWith('image/
 const robotsResponse = await fetch(`${base}/robots.txt`);
 const sitemapResponse = await fetch(`${base}/sitemap.xml`);
 record('robots and sitemap discovery files', robotsResponse.ok && (await robotsResponse.text()).includes('Sitemap:') && sitemapResponse.ok && (await sitemapResponse.text()).includes('<urlset'), `${robotsResponse.status}/${sitemapResponse.status}`);
+const knownRouteStatuses = await Promise.all(['/demo', '/invoices', '/cadence', '/settings', '/privacy', '/terms'].map(async (path) => (await fetch(`${base}${path}`)).status));
+record('known route HTTP status', knownRouteStatuses.every((status) => status === 200), knownRouteStatuses.join('/'));
 const notFoundResponse = await fetch(`${base}/not-a-page`);
 record('designed HTTP 404', notFoundResponse.status === 404 && (await notFoundResponse.text()).includes('This page does not exist.'), `${notFoundResponse.status}`);
 
@@ -60,10 +62,25 @@ for (const viewport of [{ name: 'desktop', width: 1440, height: 900 }, { name: '
   record(`${viewport.name} console`, errors.length === 0, errors.join(' | '));
   record(`${viewport.name} first-party load`, requests.every((url) => new URL(url).origin === base), requests.filter((url) => new URL(url).origin !== base).join(', '));
   if (viewport.name === 'desktop') {
+    const reminderLineCount = await page.locator('#welcome-title').evaluate((heading) => {
+      const text = heading.firstChild;
+      if (!text?.textContent) return 0;
+      const start = text.textContent.indexOf('reminders');
+      return new Set(Array.from({ length: 'reminders'.length }, (_, index) => {
+        const range = document.createRange();
+        range.setStart(text, start + index);
+        range.setEnd(text, start + index + 1);
+        return Math.round(range.getBoundingClientRect().top);
+      })).size;
+    });
+    record('desktop headline keeps words intact', reminderLineCount === 1, `${reminderLineCount} lines for reminders`);
     await page.keyboard.press('Tab');
     record('keyboard skip focus', await page.evaluate(() => document.activeElement?.classList.contains('skip-link')));
     await page.keyboard.press('Enter');
     record('keyboard skip target', await page.evaluate(() => document.activeElement?.id === 'main'));
+    await page.goto(`${base}/demo`, { waitUntil: 'networkidle' });
+    record('demo route title and sample label', await page.title() === 'Demo — Gentle Nudge' && await page.locator('.demo-banner').isVisible(), await page.title());
+    await page.goto(base, { waitUntil: 'networkidle' });
   } else {
     const smallTargets = await page.locator('a,button,input,select,textarea').evaluateAll((elements) => elements.filter((element) => {
       const bounds = element.getBoundingClientRect();

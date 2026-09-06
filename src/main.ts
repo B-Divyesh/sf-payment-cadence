@@ -86,7 +86,7 @@ function legalPage(kind: 'privacy' | 'terms') {
   setMetadata(`${privacy ? 'Privacy' : 'Terms'} — Gentle Nudge`, privacy ? 'How Gentle Nudge stores and handles payment reminder workspace data.' : 'Terms for using Gentle Nudge to prepare payment reminder drafts.', privacy ? '/privacy' : '/terms');
   app.innerHTML = `
     ${siteHeader()}
-    <main id="main" class="legal-page">
+    <main id="main" class="legal-page" tabindex="-1">
       <p class="eyebrow">${privacy ? 'Privacy' : 'Terms'}</p>
       <h1>${privacy ? 'Your payment reminders stay private' : 'Terms for preparing payment reminders'}</h1>
       ${privacy ? `
@@ -119,13 +119,18 @@ function siteHeader() {
 }
 
 function siteFooter() {
-  return `<footer><p>Prepare payment reminders on your device.</p><div><a href="/privacy">Privacy</a><a href="/terms">Terms</a><span>Built by Param Factory · v1.1.0</span></div></footer>`;
+  return `<footer><p>Prepare payment reminders on your device.</p><div><a href="/privacy">Privacy</a><a href="/terms">Terms</a><span>Built by Param Factory · v1.1.1</span></div></footer>`;
 }
 
 function shell() {
   const title = routeMissing ? 'Page not found' : headings[view];
   const isLanding = !routeMissing && !loadError && view === 'today' && invoices.length === 0;
-  setMetadata(routeMissing ? 'Page not found — Gentle Nudge' : `${view === 'today' ? 'Gentle Nudge — prepare payment reminders' : `${title} — Gentle Nudge`}`, routeMissing ? 'This Gentle Nudge page does not exist.' : descriptions[view], location.pathname);
+  const pageTitle = routeMissing
+    ? 'Page not found — Gentle Nudge'
+    : demoMode
+      ? view === 'today' ? 'Demo — Gentle Nudge' : `Demo ${title} — Gentle Nudge`
+      : view === 'today' ? 'Gentle Nudge — prepare payment reminders' : `${title} — Gentle Nudge`;
+  setMetadata(pageTitle, routeMissing ? 'This Gentle Nudge page does not exist.' : descriptions[view], location.pathname);
   app.innerHTML = `
     ${siteHeader()}
     ${demoMode ? `<aside class="demo-banner" role="status"><strong>Demo — sample data, nothing is saved</strong><span>Changes stay in the sample workspace.</span><button class="button secondary compact" data-action="reset-demo">Reset demo</button><a class="button primary compact" href="/">Start for real</a></aside>` : ''}
@@ -170,7 +175,7 @@ function renderToday(): string {
 }
 
 function landingPage() {
-  setMetadata('Gentle Nudge — prepare payment reminders', descriptions.today, '/');
+  setMetadata(demoMode ? 'Demo — Gentle Nudge' : 'Gentle Nudge — prepare payment reminders', descriptions.today, demoMode ? location.pathname : '/');
   return `
     <section class="welcome" aria-labelledby="welcome-title">
       <div class="welcome-copy"><p class="eyebrow">Payment reminder workspace</p><h1 id="welcome-title">Prepare payment reminders before you send</h1><p>For independent service providers who need respectful follow-up on late invoices.</p><div class="first-actions"><a class="button primary" href="/demo">Try it with sample data</a><span>See three realistic invoices and ready-to-review drafts.</span></div><button class="button secondary" data-action="add">Add your first invoice</button><ul class="plain-facts"><li>Private data stays on this device.</li><li>Works offline after the first visit.</li><li>Plus costs US $18 once. No subscription.</li></ul></div>
@@ -179,7 +184,7 @@ function landingPage() {
     <section class="landing-section product-preview" aria-labelledby="preview-title"><p class="eyebrow">The workspace</p><h2 id="preview-title">See which reminder needs your review</h2><p>Each invoice shows its due date, private note, reminder step, and a draft you can edit.</p><div class="preview-slip"><span>Due today</span><strong>Acorn Architecture · AC-204</strong><span>Review draft before sending</span></div></section>
     <section class="landing-section" aria-labelledby="how-title"><p class="eyebrow">How it works</p><h2 id="how-title">Prepare each reminder in three steps</h2><ol class="how-list"><li><strong>Add an invoice</strong><span>Save its due date and private context.</span></li><li><strong>Review the draft</strong><span>Edit the stage template in your own words.</span></li><li><strong>Choose how to send</strong><span>Copy the text or open your email app. Nothing sends automatically.</span></li></ol></section>
     <section class="landing-section limits-section" aria-labelledby="limits-title"><p class="eyebrow">Privacy and limits</p><h2 id="limits-title">You keep control of every client relationship</h2><p>Gentle Nudge does not connect to banks or invoice providers. It does not profile clients, predict payment, or use collection threats.</p></section>
-    <section class="landing-section upgrade-strip" aria-labelledby="price-title"><div><p class="eyebrow">Gentle Nudge Plus</p><h2 id="price-title">Add more invoices and reminder steps</h2><p>Free includes five active invoices and three editable steps. Plus adds unlimited active invoices and up to five steps for US $18 once.</p></div><a class="button primary" href="https://api.sociobot.in/api/v1/products/payment-cadence/checkout">Buy Plus for US $18</a></section>`;
+    <section class="landing-section upgrade-strip" aria-labelledby="price-title"><div><p class="eyebrow">Gentle Nudge Plus</p><h2 id="price-title">Add more invoices and reminder steps</h2><p>Free includes five active invoices and three editable steps. Plus supports at least 25 active invoices and up to five steps for US $18 once.</p></div><a class="button primary" href="https://api.sociobot.in/api/v1/products/payment-cadence/checkout">Buy Plus for US $18</a></section>`;
 }
 
 function invoiceCard(invoice: Invoice): string {
@@ -210,13 +215,13 @@ function renderTemplates(): string {
         <label>Subject<input name="subject" value="${e(stage.subject)}" required></label><label>Message<textarea name="body" rows="8" required>${e(stage.body)}</textarea></label>
         <div class="template-foot"><p>Use: <code>{{client}}</code> <code>{{invoice}}</code> <code>{{amount}}</code> <code>{{dueDate}}</code> <code>{{sender}}</code></p><button class="button secondary" type="submit">Save this step</button></div>
       </div></form>`).join('')}</div>
-    ${unlocked ? `<button class="button secondary" data-action="add-stage" ${settings.templates.length >= 5 ? 'disabled' : ''}>Add another step</button>` : `<aside class="upgrade-strip"><div><p class="eyebrow">Gentle Nudge Plus</p><h2>Add more reminder steps</h2><p>Unlock up to five steps and unlimited active invoices with a one-time US $18 purchase.</p></div><a class="button primary" href="https://api.sociobot.in/api/v1/products/payment-cadence/checkout">Unlock Plus</a></aside>`}`;
+    ${unlocked ? `<button class="button secondary" data-action="add-stage" ${settings.templates.length >= 5 ? 'disabled' : ''}>Add another step</button>` : `<aside class="upgrade-strip"><div><p class="eyebrow">Gentle Nudge Plus</p><h2>Add more reminder steps</h2><p>Use at least 25 active invoices and up to five steps with a one-time US $18 purchase.</p></div><a class="button primary" href="https://api.sociobot.in/api/v1/products/payment-cadence/checkout">Unlock Plus</a></aside>`}`;
 }
 
 function renderSettings(): string {
   return `<div class="settings-grid">
     <section><h2>Your sign-off</h2><p>Used only to fill <code>{{sender}}</code> in drafts.</p><form id="profile-form"><label>Your name<input name="senderName" value="${e(settings.senderName)}" autocomplete="name"></label><label>Business name <span>Optional</span><input name="businessName" value="${e(settings.businessName)}" autocomplete="organization"></label><button class="button secondary" type="submit">Save details</button></form></section>
-    <section><h2>Gentle Nudge Plus</h2>${unlocked ? `<p class="license-state success"><span aria-hidden="true">✓</span> Plus is active on this device.</p><p>You have unlimited active invoices and up to five cadence steps.</p>` : `<p>Free includes three editable steps and up to five active invoices. Plus removes that limit and adds two more steps.</p><p><strong>US $18 once.</strong> No subscription.</p><a class="button primary" href="https://api.sociobot.in/api/v1/products/payment-cadence/checkout">Buy Plus</a><form id="license-form"><label>Have a license? Paste it here<input name="license" autocomplete="off" spellcheck="false"></label><button class="button secondary" type="submit">Restore purchase</button></form>`}<p id="license-note" class="form-note" role="status">${e(licenseNotice)}</p></section>
+    <section><h2>Gentle Nudge Plus</h2>${unlocked ? `<p class="license-state success"><span aria-hidden="true">✓</span> Plus is active on this device.</p><p>You can use at least 25 active invoices and up to five cadence steps.</p>` : `<p>Free includes three editable steps and up to five active invoices. Plus supports at least 25 active invoices and adds two more steps.</p><p><strong>US $18 once.</strong> No subscription.</p><a class="button primary" href="https://api.sociobot.in/api/v1/products/payment-cadence/checkout">Buy Plus</a><form id="license-form"><label>Have a license? Paste it here<input name="license" autocomplete="off" spellcheck="false"></label><button class="button secondary" type="submit">Restore purchase</button></form>`}<p id="license-note" class="form-note" role="status">${e(licenseNotice)}</p></section>
     <section class="data-section"><h2>Your data</h2><p>Export a full backup for this app, or a spreadsheet-friendly invoice list. Import replaces nothing: records with the same ID are updated.</p><div class="button-cluster"><button class="button secondary" data-action="export-json">Export backup</button><button class="button secondary" data-action="export-csv">Export CSV</button><label class="button secondary file-button">Import backup<input id="import-file" type="file" accept="application/json"></label></div><button class="danger-link" data-action="delete-all">Delete all local data</button></section>
     <section><h2>What this app never does</h2><ul class="promise-list"><li>Sends or schedules an email</li><li>Connects to your bank or invoice account</li><li>Scores clients or predicts payment</li><li>Uses collection threats</li></ul></section>
   </div>`;
@@ -306,6 +311,20 @@ document.addEventListener('click', async (event) => {
   const anchor = (event.target as HTMLElement).closest<HTMLAnchorElement>('a[href]');
   if (anchor && !anchor.hasAttribute('download')) {
     const destination = new URL(anchor.href, location.origin);
+    const sameDocumentFragment = destination.origin === location.origin
+      && destination.pathname === location.pathname
+      && destination.search === location.search
+      && Boolean(destination.hash);
+    if (sameDocumentFragment) {
+      const target = document.getElementById(decodeURIComponent(destination.hash.slice(1)));
+      if (target) {
+        event.preventDefault();
+        history.pushState({}, '', `${destination.pathname}${destination.search}${destination.hash}`);
+        target.focus();
+        target.scrollIntoView();
+      }
+      return;
+    }
     if (destination.origin === location.origin && !isLegalPage()) {
       event.preventDefault();
       navigateTo(`${destination.pathname}${destination.search}${destination.hash}`);
@@ -379,7 +398,14 @@ async function outputDraft(kind: 'copied' | 'email-opened') {
   const stage = settings.templates.find((s) => s.id === draft!.stageId)!;
   invoice.history.push({ id: crypto.randomUUID(), at: new Date().toISOString(), stageId: stage.id, stageName: stage.name, kind }); await persistInvoices();
   if (kind === 'copied') { try { await navigator.clipboard.writeText(`Subject: ${draft.subject}\n\n${draft.body}`); toast('Message copied. Nothing was sent.'); } catch { toast('Copy was blocked. Select the message and copy it manually.'); } }
-  else { location.href = `mailto:${encodeURIComponent(invoice.email)}?subject=${encodeURIComponent(draft.subject)}&body=${encodeURIComponent(draft.body)}`; toast('Email draft opened. Return here to mark it sent.'); }
+  else {
+    const link = document.createElement('a');
+    link.href = `mailto:${encodeURIComponent(invoice.email)}?subject=${encodeURIComponent(draft.subject)}&body=${encodeURIComponent(draft.body)}`;
+    document.body.append(link);
+    link.click();
+    link.remove();
+    toast('Email draft opened. Return here to mark it sent.');
+  }
 }
 
 async function markSent() {

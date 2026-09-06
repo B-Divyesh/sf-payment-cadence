@@ -15,7 +15,7 @@ Try the product at <https://payment-cadence.sociobot.in/demo>. The sample opens 
 - Keeps normal workspace activity on the product origin. It loads no analytics, trackers, remote fonts, or third-party scripts.
 - Does not connect to banks or invoice providers. It does not profile clients, predict payment, or use collection threats.
 
-Free includes five active invoices and three editable reminder steps. Gentle Nudge Plus is US $18 once with no subscription. Plus supports unlimited active invoices and up to five reminder steps.
+Free includes five active invoices and three editable reminder steps. Gentle Nudge Plus is US $18 once with no subscription. Plus supports at least 25 active invoices and up to five reminder steps.
 
 ## Run locally
 

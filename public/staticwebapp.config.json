@@ -23,23 +23,64 @@
       "headers": {
         "Cache-Control": "public, max-age=3600"
       }
+    },
+    {
+      "route": "/demo",
+      "rewrite": "/index.html"
+    },
+    {
+      "route": "/demo/invoices",
+      "rewrite": "/index.html"
+    },
+    {
+      "route": "/demo/cadence",
+      "rewrite": "/index.html"
+    },
+    {
+      "route": "/demo/settings",
+      "rewrite": "/index.html"
+    },
+    {
+      "route": "/invoices",
+      "rewrite": "/index.html"
+    },
+    {
+      "route": "/cadence",
+      "rewrite": "/index.html"
+    },
+    {
+      "route": "/settings",
+      "rewrite": "/index.html"
+    },
+    {
+      "route": "/invoices/",
+      "rewrite": "/index.html"
+    },
+    {
+      "route": "/cadence/",
+      "rewrite": "/index.html"
+    },
+    {
+      "route": "/settings/",
+      "rewrite": "/index.html"
+    },
+    {
+      "route": "/privacy",
+      "rewrite": "/privacy/index.html"
+    },
+    {
+      "route": "/privacy/",
+      "rewrite": "/privacy/index.html"
+    },
+    {
+      "route": "/terms",
+      "rewrite": "/terms/index.html"
+    },
+    {
+      "route": "/terms/",
+      "rewrite": "/terms/index.html"
     }
   ],
-  "navigationFallback": {
-    "rewrite": "/index.html",
-    "exclude": [
-      "/assets/*",
-      "/fonts/*",
-      "/icons/*",
-      "/manifest.webmanifest",
-      "/offline.html",
-      "/sw.js",
-      "/robots.txt",
-      "/sitemap.xml",
-      "/404.html",
-      "/404.css"
-    ]
-  },
   "responseOverrides": {
     "404": {
       "rewrite": "/404.html"

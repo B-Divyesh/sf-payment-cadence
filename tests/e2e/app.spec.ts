@@ -21,19 +21,27 @@ async function goTo(page: Page, name: 'Today' | 'Invoices' | 'Cadence' | 'Settin
 
 test('@claim:demo-sandbox loads sample invoices in isolated storage', async ({ page }) => {
   await page.goto('/');
-  await addInvoice(page, 'REAL', { client: 'Real Studio' });
-  await page.goto('/demo');
+  await page.getByRole('link', { name: 'Try it with sample data' }).click();
+  await expect(page).toHaveURL(/\/demo$/);
   await expect(page.locator('.demo-banner')).toContainText('Demo — sample data, nothing is saved');
-  await expect(page.getByText('Acorn Architecture')).toBeVisible();
+  await goTo(page, 'Invoices');
+  await expect(page.locator('tbody tr')).toHaveCount(3);
+  for (const client of ['Acorn Architecture', 'Haven Ceramics', 'Juniper Learning']) {
+    await expect(page.locator('tbody tr', { hasText: client })).toBeVisible();
+  }
   await addInvoice(page, 'DEMO', { client: 'Demo-only Studio' });
-  await page.goto('/');
+  await page.getByRole('link', { name: 'Start for real' }).click();
+  await addInvoice(page, 'REAL', { client: 'Real Studio' });
   await expect(page.getByText('Real Studio')).toBeVisible();
   await expect(page.getByText('Demo-only Studio')).toHaveCount(0);
   await page.goto('/demo');
+  await expect(page.getByText('Real Studio')).toHaveCount(0);
   await expect(page.getByText('Demo-only Studio')).toBeVisible();
   await page.getByRole('button', { name: 'Reset demo' }).click();
   await expect(page.getByText('Demo-only Studio')).toHaveCount(0);
   await expect(page.getByText('Acorn Architecture')).toBeVisible();
+  await goTo(page, 'Invoices');
+  await expect(page.locator('tbody tr')).toHaveCount(3);
 });
 
 test('@claim:due-queue-drafts shows a due invoice with an editable stage draft', async ({ page }) => {
@@ -70,7 +78,6 @@ test('@claim:history-pause-paid preserves reminder history, pauses, and paid sta
   await expect(page.locator('tr', { hasText: 'Acorn Architecture' }).getByText(/Last sent .*A friendly check-in/)).toBeVisible();
   await page.locator('tr', { hasText: 'Acorn Architecture' }).getByRole('button', { name: 'Mark paid' }).click();
   await expect(page.getByText('Paid', { exact: true })).toBeVisible();
-  await page.getByRole('button', { name: 'Reopen' }).click();
   await goTo(page, 'Today');
   await page.locator('article', { hasText: 'Haven Ceramics' }).getByRole('button', { name: 'Pause' }).click();
   await page.getByLabel('Why are you pausing? Optional').fill('They asked for Friday.');
@@ -78,6 +85,13 @@ test('@claim:history-pause-paid preserves reminder history, pauses, and paid sta
   await expect(page.getByText(/Paused until/)).toBeVisible();
   await page.reload();
   await expect(page.getByText(/Paused until/)).toBeVisible();
+  await goTo(page, 'Invoices');
+  const acorn = page.locator('tr', { hasText: 'Acorn Architecture' });
+  await expect(acorn.getByText('Paid', { exact: true })).toBeVisible();
+  await expect(acorn.getByText(/Last sent .*A friendly check-in/)).toBeVisible();
+  const haven = page.locator('tr', { hasText: 'Haven Ceramics' });
+  await expect(haven.getByText(/Paused until/)).toBeVisible();
+  await expect(haven.getByText('They asked for Friday.')).toBeVisible();
 });
 
 test('@claim:review-before-send keeps copy and email draft actions under user review', async ({ page, context }) => {
@@ -88,7 +102,22 @@ test('@claim:review-before-send keeps copy and email draft actions under user re
   await page.getByLabel('Message').fill('Hi Acorn Architecture,\n\nPlease confirm your payment date.');
   await page.getByRole('button', { name: 'Copy message' }).click();
   await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toBe('Subject: A personal payment check-in\n\nHi Acorn Architecture,\n\nPlease confirm your payment date.');
-  await expect(page.getByRole('button', { name: 'Open email draft' })).toBeVisible();
+  await page.evaluate(() => {
+    document.addEventListener('click', (event) => {
+      const link = (event.target as Element).closest<HTMLAnchorElement>('a[href^="mailto:"]');
+      if (!link) return;
+      event.preventDefault();
+      (window as typeof window & { capturedMailto?: string }).capturedMailto = link.href;
+    }, { capture: true });
+  });
+  await page.getByRole('button', { name: 'Open email draft' }).click();
+  await expect.poll(() => page.evaluate(() => (window as typeof window & { capturedMailto?: string }).capturedMailto ?? '')).toMatch(/^mailto:/);
+  const mailto = await page.evaluate(() => (window as typeof window & { capturedMailto?: string }).capturedMailto ?? '');
+  const mailtoUrl = new URL(mailto);
+  expect(decodeURIComponent(mailtoUrl.pathname)).toBe('accounts@acorn.example');
+  expect(mailtoUrl.searchParams.get('subject')).toBe('A personal payment check-in');
+  expect(mailtoUrl.searchParams.get('body')).toBe('Hi Acorn Architecture,\n\nPlease confirm your payment date.');
+  await expect(page.locator('#toast')).toContainText('Email draft opened. Return here to mark it sent.');
   await expect(page.getByRole('button', { name: 'I sent it' })).toBeVisible();
 });
 
@@ -135,13 +164,43 @@ test('@claim:csv-export downloads an invoice row for each sample invoice', async
   expect(contents).toContain('"Acorn Architecture"');
 });
 
-test('@claim:delete-local-data removes every sample invoice after confirmation', async ({ page }) => {
+test('@claim:delete-local-data removes invoices, history, paid state, notes, and settings after confirmation', async ({ page }) => {
   await page.goto('/demo');
+  await page.locator('article', { hasText: 'Acorn Architecture' }).getByRole('button', { name: 'Review draft' }).click();
+  await page.getByRole('button', { name: 'I sent it' }).click();
+  await goTo(page, 'Invoices');
+  await page.locator('tr', { hasText: 'Acorn Architecture' }).getByRole('button', { name: 'Mark paid' }).click();
+  await goTo(page, 'Cadence');
+  await page.getByLabel('Step name').first().fill('Temporary private step');
+  await page.getByRole('button', { name: 'Save this step' }).first().click();
   await goTo(page, 'Settings');
+  await page.getByLabel('Your name').fill('Private Name');
+  await page.getByLabel('Business name').fill('Private Business');
+  await page.getByRole('button', { name: 'Save details' }).click();
   page.once('dialog', (dialog) => dialog.accept());
   await page.getByRole('button', { name: 'Delete all local data' }).click();
+  await expect.poll(() => page.evaluate(async () => {
+    const db = await new Promise<IDBDatabase>((resolve, reject) => {
+      const request = indexedDB.open('demo:gentle-nudge');
+      request.onsuccess = () => resolve(request.result);
+      request.onerror = () => reject(request.error);
+    });
+    const keys = await new Promise<IDBValidKey[]>((resolve, reject) => {
+      const request = db.transaction('workspace', 'readonly').objectStore('workspace').getAllKeys();
+      request.onsuccess = () => resolve(request.result);
+      request.onerror = () => reject(request.error);
+    });
+    db.close();
+    return keys;
+  })).toEqual([]);
   await goTo(page, 'Invoices');
   await expect(page.getByText('No invoices yet')).toBeVisible();
+  await goTo(page, 'Cadence');
+  await expect(page.locator('.template-sheet')).toHaveCount(3);
+  await expect(page.getByLabel('Step name').first()).toHaveValue('A friendly check-in');
+  await goTo(page, 'Settings');
+  await expect(page.getByLabel('Your name')).toHaveValue('');
+  await expect(page.getByLabel('Business name')).toHaveValue('');
 });
 
 test('@claim:offline-reload works after the first sample visit', async ({ page, context }) => {
@@ -171,25 +230,33 @@ test('@claim:responsive-reflow keeps populated workspace and legal pages within 
 
 test('@claim:free-limit blocks a sixth active invoice without Plus', async ({ page }) => {
   await page.goto('/');
+  await goTo(page, 'Cadence');
+  await expect(page.locator('.template-sheet')).toHaveCount(3);
+  await page.getByLabel('Step name').first().fill('My first reminder');
+  await page.getByRole('button', { name: 'Save this step' }).first().click();
+  await expect(page.locator('#toast')).toContainText('Cadence step saved.');
+  await page.reload();
+  await expect(page.getByLabel('Step name').first()).toHaveValue('My first reminder');
+  await goTo(page, 'Today');
   for (let index = 1; index <= 5; index += 1) await addInvoice(page, String(index), { dueDate: '2099-12-31' });
   await page.getByRole('button', { name: 'Add invoice' }).first().click();
   await expect(page.getByText(/Free supports five active invoices/)).toBeVisible();
   await expect(page.getByRole('link', { name: 'Buy Plus' })).toBeVisible();
 });
 
-test('@claim:plus-limits supports six active invoices and five cadence steps with an active license', async ({ page }) => {
+test('@claim:plus-limits supports 25 active invoices and five cadence steps with an active license', async ({ page }) => {
   await page.route('https://api.sociobot.in/api/v1/products/payment-cadence/verify?*', (route) => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ valid: true, reason: 'ok', expires_at: null }) }));
   await page.goto('/?license=sample-plus');
   await goTo(page, 'Settings');
   await expect(page.getByText('Plus is active on this device.')).toBeVisible();
   await goTo(page, 'Today');
-  for (let index = 1; index <= 6; index += 1) await addInvoice(page, String(index), { dueDate: '2099-12-31' });
+  for (let index = 1; index <= 25; index += 1) await addInvoice(page, String(index), { dueDate: '2099-12-31' });
   await goTo(page, 'Cadence');
   await page.getByRole('button', { name: 'Add another step' }).click();
   await page.getByRole('button', { name: 'Add another step' }).click();
   await expect(page.locator('.template-sheet')).toHaveCount(5);
   await goTo(page, 'Invoices');
-  await expect(page.locator('tbody tr')).toHaveCount(6);
+  await expect(page.locator('tbody tr')).toHaveCount(25);
 });
 
 test('@claim:plus-price shows the one-time US $18 offer and hosted checkout action', async ({ page }) => {
@@ -240,6 +307,9 @@ test('@claim:license-request-boundary contacts the billing API only after a lice
 test('routes have distinct titles, restore with browser history, announce the new heading, and provide a designed in-app 404', async ({ page }) => {
   await page.goto('/');
   await expect(page).toHaveTitle('Gentle Nudge — prepare payment reminders');
+  await page.goto('/demo');
+  await expect(page).toHaveTitle('Demo — Gentle Nudge');
+  await page.goto('/');
   await goTo(page, 'Settings');
   await expect(page).toHaveURL(/\/settings$/);
   await expect(page).toHaveTitle('Settings — Gentle Nudge');
@@ -248,10 +318,47 @@ test('routes have distinct titles, restore with browser history, announce the ne
   await page.goBack();
   await expect(page).toHaveURL(/\/$/);
   await expect(page.getByRole('heading', { level: 1, name: 'Prepare payment reminders before you send' })).toBeVisible();
-  await page.goto('/not-a-page');
+  await page.evaluate(() => {
+    history.pushState({}, '', '/not-a-page');
+    dispatchEvent(new PopStateEvent('popstate'));
+  });
   await expect(page).toHaveTitle('Page not found — Gentle Nudge');
   await expect(page.getByRole('heading', { level: 1, name: 'Page not found' })).toBeVisible();
   await expect(page.getByRole('link', { name: 'Go to the home page' })).toBeVisible();
+});
+
+test('known deep links load while an unknown HTTP path returns the designed 404', async ({ request }) => {
+  for (const route of ['/demo', '/invoices', '/cadence', '/settings', '/privacy', '/terms']) {
+    const response = await request.get(route);
+    expect(response.status(), route).toBe(200);
+  }
+  const response = await request.get('/not-a-page');
+  expect(response.status()).toBe(404);
+  expect(await response.text()).toContain('This page does not exist.');
+});
+
+test('skip navigation focuses main and the desktop headline keeps each word intact', async ({ page }) => {
+  await page.goto('/');
+  await page.keyboard.press('Tab');
+  await expect(page.getByText('Skip to main content')).toBeFocused();
+  await page.keyboard.press('Enter');
+  await expect(page.locator('main')).toBeFocused();
+  await expect(page).toHaveURL(/#main$/);
+
+  test.skip(test.info().project.name === 'mobile', 'Desktop line wrapping is measured at 1440px.');
+  const reminderLineCount = await page.locator('#welcome-title').evaluate((heading) => {
+    const text = heading.firstChild;
+    if (!text?.textContent) return 0;
+    const start = text.textContent.indexOf('reminders');
+    const tops = Array.from({ length: 'reminders'.length }, (_, index) => {
+      const range = document.createRange();
+      range.setStart(text, start + index);
+      range.setEnd(text, start + index + 1);
+      return Math.round(range.getBoundingClientRect().top);
+    });
+    return new Set(tops).size;
+  });
+  expect(reminderLineCount).toBe(1);
 });
 
 test('legal pages share the site shell, meet touch targets, and have route metadata', async ({ page }) => {

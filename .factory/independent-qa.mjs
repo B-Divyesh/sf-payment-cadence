@@ -167,7 +167,7 @@ async function route(page, name) {
   await page.addScriptTag({ content: axeSource });
   const axe = await page.evaluate(async () => (await window.axe.run()).violations.filter((violation) => ['serious', 'critical'].includes(violation.impact)));
   record('live demo semantic shell and axe', await page.locator('html[lang="en"] main').count() === 1 && await page.locator('h1').count() === 1 && axe.length === 0);
-  record('live demo title and sample label', await page.title() === 'Gentle Nudge — prepare payment reminders' && await page.locator('.demo-banner').isVisible());
+  record('live demo title and sample label', await page.title() === 'Demo — Gentle Nudge' && await page.locator('.demo-banner').isVisible());
   record('live demo first-party load', requests.every((url) => new URL(url).origin === live), requests.filter((url) => new URL(url).origin !== live).join(', '));
   await context.close();
 }

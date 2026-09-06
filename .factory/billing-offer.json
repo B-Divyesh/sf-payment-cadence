@@ -7,7 +7,7 @@
   "return_url": "https://payment-cadence.sociobot.in/",
   "price_evidence": "Production offer verified as USD 18.00 in independent verification 4 on 2026-09-05; checkout action is https://api.sociobot.in/api/v1/products/payment-cadence/checkout.",
   "paid_features": [
-    "Unlimited active invoices",
+    "At least 25 active invoices",
     "Up to five editable reminder steps"
   ],
   "license_validation_path": "https://api.sociobot.in/api/v1/products/payment-cadence/verify?license=<token>"

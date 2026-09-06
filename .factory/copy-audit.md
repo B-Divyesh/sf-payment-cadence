@@ -34,7 +34,7 @@ Audited 6 September 2026. Counts include headings, buttons, facts, and visible e
 | Gentle Nudge Plus | 3 | pass |
 | Add more invoices and reminder steps | 6 | pass |
 | Free includes five active invoices and three editable steps. | 9 | pass |
-| Plus adds unlimited active invoices and up to five steps for US $18 once. | 14 | pass |
+| Plus supports at least 25 active invoices and up to five steps for US $18 once. | 16 | pass |
 | Buy Plus for US $18 | 5 | pass |
 
 ## Terminology
