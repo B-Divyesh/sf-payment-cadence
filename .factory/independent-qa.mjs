@@ -79,12 +79,14 @@ async function route(page, name) {
   await page.goto(`${base}/demo`);
   record('demo data persists only in demo namespace', await page.getByText('Demo-only client').isVisible());
   await page.getByRole('button', { name: 'Reset demo' }).click();
+  await page.waitForFunction(() => document.querySelector('#toast')?.textContent === 'Sample data was reset.');
   record('reset demo reseeds the sample', await page.getByText('Demo-only client').count() === 0 && await page.getByText('Acorn Architecture').isVisible());
 
   await page.locator('article', { hasText: 'Acorn Architecture' }).getByRole('button', { name: 'Review draft' }).click();
   await page.getByLabel('Subject').fill('A reviewed payment note');
   await page.getByLabel('Message').fill('Hi Acorn Architecture,\n\nPlease confirm the payment date.');
   await page.getByRole('button', { name: 'Copy message' }).click();
+  await page.waitForFunction(async () => (await navigator.clipboard.readText()) === 'Subject: A reviewed payment note\n\nHi Acorn Architecture,\n\nPlease confirm the payment date.');
   const copied = await page.evaluate(() => navigator.clipboard.readText());
   record('editable copy output and explicit sent control', copied === 'Subject: A reviewed payment note\n\nHi Acorn Architecture,\n\nPlease confirm the payment date.' && await page.getByRole('button', { name: 'I sent it' }).isVisible());
   await page.getByRole('button', { name: 'I sent it' }).click();
@@ -93,7 +95,7 @@ async function route(page, name) {
   await route(page, 'Cadence');
   await page.getByLabel('Step name').first().fill('First reviewed reminder');
   await page.getByRole('button', { name: 'Save this step' }).first().click();
-  await page.locator('#toast').waitFor({ state: 'visible' });
+  await page.waitForFunction(() => document.querySelector('#toast')?.textContent === 'Cadence step saved.');
   await page.reload();
   record('editable cadence persists', await page.getByLabel('Step name').first().inputValue() === 'First reviewed reminder');
   await route(page, 'Settings');
