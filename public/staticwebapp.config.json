@@ -53,31 +53,11 @@
       "rewrite": "/index.html"
     },
     {
-      "route": "/invoices/",
-      "rewrite": "/index.html"
-    },
-    {
-      "route": "/cadence/",
-      "rewrite": "/index.html"
-    },
-    {
-      "route": "/settings/",
-      "rewrite": "/index.html"
-    },
-    {
       "route": "/privacy",
       "rewrite": "/privacy/index.html"
     },
     {
-      "route": "/privacy/",
-      "rewrite": "/privacy/index.html"
-    },
-    {
       "route": "/terms",
-      "rewrite": "/terms/index.html"
-    },
-    {
-      "route": "/terms/",
       "rewrite": "/terms/index.html"
     }
   ],
